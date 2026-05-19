@@ -152,6 +152,24 @@ export async function createTask(
 	return task;
 }
 
+export async function updateTask(
+	id: string,
+	patch: Partial<Omit<Task, 'id' | 'createdAt' | 'updatedAt'>>
+): Promise<Task | null> {
+	const existing = await db.tasks.get(id);
+	if (!existing) return null;
+	const updated: Task = {
+		...existing,
+		...patch,
+		id: existing.id,
+		createdAt: existing.createdAt,
+		updatedAt: new Date().toISOString()
+	};
+	await db.tasks.put(updated);
+	void pushTask(updated);
+	return updated;
+}
+
 export async function completeTask(taskId: string, at = new Date()): Promise<void> {
 	const now = new Date().toISOString();
 	const completion = {
