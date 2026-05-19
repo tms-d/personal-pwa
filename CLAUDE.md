@@ -37,9 +37,25 @@ drives all "is it done this period" / "when did I last do it" logic.
   build time as `PUBLIC_SUPABASE_URL` / `PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
   Both are safe to ship to the client (publishable key is RLS-protected).
 
+## Sync
+
+- Schema lives in `supabase/migrations/`. Supabase GitHub integration applies
+  on push to `main`. `tasks` and `completions` tables, each row owned by a
+  `user_id` referencing `auth.users`. RLS restricts every operation to the
+  owner.
+- Soft deletes via `deleted_at`. Client filters those out for display but
+  keeps the rows around so sync can propagate the deletion.
+- Push: each local mutation fires `pushTask` / `pushCompletion` to Supabase,
+  best-effort. Failures fall through to the next full sync.
+- Pull: `fullSync()` runs on sign-in and on `window.focus`. Uploads local
+  rows then pulls all remote rows; merges by ID with last-write-wins on
+  `updated_at`.
+- Auth: GitHub OAuth via Supabase. Sign-in is optional — the app works
+  offline-local without it.
+
 ## Not yet implemented
 
-- Supabase sync (schema design + RLS policies still to come)
-- GitHub OAuth sign-in
-- Push notifications (out of scope for v1)
+- Realtime subscriptions (currently pull-on-focus, no push from server)
 - Task editing (only create / complete / delete right now)
+- Push notifications (out of scope for v1)
+- "Clear local data on sign-out" option

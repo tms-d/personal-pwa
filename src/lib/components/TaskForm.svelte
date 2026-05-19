@@ -16,7 +16,7 @@
 		if (!title.trim()) return;
 		submitting = true;
 		try {
-			const base: Omit<Task, 'id' | 'createdAt'> = {
+			const base: Omit<Task, 'id' | 'createdAt' | 'updatedAt'> = {
 				title: title.trim(),
 				notes: notes.trim() || undefined,
 				kind

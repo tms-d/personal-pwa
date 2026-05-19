@@ -1,5 +1,6 @@
 import type { Task, TaskWithLast, Period } from './types';
 import { db, uid } from './db';
+import { pushTask, pushCompletion } from './sync.svelte';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -127,41 +128,73 @@ export async function loadTasksWithLast(): Promise<TaskWithLast[]> {
 	const completions = await db.completions.toArray();
 	const lastByTask = new Map<string, string>();
 	for (const c of completions) {
+		if (c.deletedAt) continue;
 		const cur = lastByTask.get(c.taskId);
 		if (!cur || c.at > cur) lastByTask.set(c.taskId, c.at);
 	}
-	return tasks.map((t) => ({ ...t, lastCompletedAt: lastByTask.get(t.id) ?? null }));
+	return tasks
+		.filter((t) => !t.deletedAt)
+		.map((t) => ({ ...t, lastCompletedAt: lastByTask.get(t.id) ?? null }));
 }
 
-export async function createTask(input: Omit<Task, 'id' | 'createdAt'>): Promise<Task> {
+export async function createTask(
+	input: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<Task> {
+	const now = new Date().toISOString();
 	const task: Task = {
 		...input,
 		id: uid(),
-		createdAt: new Date().toISOString()
+		createdAt: now,
+		updatedAt: now
 	};
 	await db.tasks.add(task);
+	void pushTask(task);
 	return task;
 }
 
 export async function completeTask(taskId: string, at = new Date()): Promise<void> {
-	await db.completions.add({
+	const now = new Date().toISOString();
+	const completion = {
 		id: uid(),
 		taskId,
-		at: at.toISOString()
-	});
+		at: at.toISOString(),
+		updatedAt: now
+	};
+	await db.completions.add(completion);
+	void pushCompletion(completion);
 }
 
 export async function uncompleteTask(taskId: string): Promise<void> {
-	const completions = await db.completions.where('taskId').equals(taskId).toArray();
+	const completions = await db.completions
+		.where('taskId')
+		.equals(taskId)
+		.filter((c) => !c.deletedAt)
+		.toArray();
 	if (completions.length === 0) return;
 	completions.sort((a, b) => (a.at < b.at ? 1 : -1));
-	await db.completions.delete(completions[0].id);
+	const target = completions[0];
+	const now = new Date().toISOString();
+	const updated = { ...target, deletedAt: now, updatedAt: now };
+	await db.completions.put(updated);
+	void pushCompletion(updated);
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
-	await db.transaction('rw', db.tasks, db.completions, async () => {
-		await db.tasks.delete(taskId);
-		const cs = await db.completions.where('taskId').equals(taskId).toArray();
-		await db.completions.bulkDelete(cs.map((c) => c.id));
-	});
+	const now = new Date().toISOString();
+	const task = await db.tasks.get(taskId);
+	if (!task) return;
+	const updatedTask = { ...task, deletedAt: now, updatedAt: now };
+	await db.tasks.put(updatedTask);
+	void pushTask(updatedTask);
+
+	const completions = await db.completions
+		.where('taskId')
+		.equals(taskId)
+		.filter((c) => !c.deletedAt)
+		.toArray();
+	for (const c of completions) {
+		const updated = { ...c, deletedAt: now, updatedAt: now };
+		await db.completions.put(updated);
+		void pushCompletion(updated);
+	}
 }
