@@ -20,6 +20,8 @@ export interface Task {
 	kind: TaskKind;
 	createdAt: string;
 	archivedAt?: string;
+	updatedAt: string;
+	deletedAt?: string;
 	recurrence?: Recurrence;
 	cadence?: Cadence;
 }
@@ -28,6 +30,8 @@ export interface Completion {
 	id: string;
 	taskId: string;
 	at: string;
+	updatedAt: string;
+	deletedAt?: string;
 }
 
 export type TaskWithLast = Task & { lastCompletedAt: string | null };

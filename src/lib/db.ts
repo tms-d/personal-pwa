@@ -11,6 +11,26 @@ export class PPODB extends Dexie {
 			tasks: 'id, kind, archivedAt, createdAt',
 			completions: 'id, taskId, at'
 		});
+		this.version(2)
+			.stores({
+				tasks: 'id, kind, archivedAt, createdAt, updatedAt, deletedAt',
+				completions: 'id, taskId, at, updatedAt, deletedAt'
+			})
+			.upgrade(async (tx) => {
+				const now = new Date().toISOString();
+				await tx
+					.table('tasks')
+					.toCollection()
+					.modify((t) => {
+						t.updatedAt = t.createdAt ?? now;
+					});
+				await tx
+					.table('completions')
+					.toCollection()
+					.modify((c) => {
+						c.updatedAt = c.at ?? now;
+					});
+			});
 	}
 }
 
