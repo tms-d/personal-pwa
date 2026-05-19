@@ -3,6 +3,7 @@
 	import { computeStatus } from '$lib/tasks';
 	import { completeTask, uncompleteTask, deleteTask } from '$lib/tasks';
 	import { reloadTasks } from '$lib/store.svelte';
+	import TaskEditDialog from './TaskEditDialog.svelte';
 
 	interface Props {
 		task: TaskWithLast;
@@ -10,6 +11,7 @@
 	}
 
 	let { task, showActions = true }: Props = $props();
+	let editing = $state(false);
 
 	const status = $derived(computeStatus(task));
 
@@ -61,7 +63,7 @@
 		<span class="text-stone-500 shrink-0 text-xs">{status.label}</span>
 	</div>
 	{#if showActions}
-		<div class="flex gap-2">
+		<div class="flex flex-wrap gap-2">
 			<button
 				type="button"
 				onclick={markDone}
@@ -80,11 +82,22 @@
 			{/if}
 			<button
 				type="button"
+				onclick={() => (editing = true)}
+				class="ml-auto rounded-md bg-white px-3 py-1.5 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50"
+			>
+				Edit
+			</button>
+			<button
+				type="button"
 				onclick={remove}
-				class="ml-auto rounded-md bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-stone-300 hover:bg-red-50"
+				class="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-stone-300 hover:bg-red-50"
 			>
 				Delete
 			</button>
 		</div>
 	{/if}
 </article>
+
+{#if editing}
+	<TaskEditDialog {task} onClose={() => (editing = false)} />
+{/if}

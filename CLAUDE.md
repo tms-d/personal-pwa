@@ -56,6 +56,5 @@ drives all "is it done this period" / "when did I last do it" logic.
 ## Not yet implemented
 
 - Realtime subscriptions (currently pull-on-focus, no push from server)
-- Task editing (only create / complete / delete right now)
 - Push notifications (out of scope for v1)
 - "Clear local data on sign-out" option
