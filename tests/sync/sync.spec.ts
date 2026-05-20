@@ -58,10 +58,10 @@ test.describe('Sync', { tag: '@sync' }, () => {
 
 	test('creating a task locally pushes to Supabase', async ({ page }) => {
 		if (!config) return;
-		await page.goto('/');
+		await page.goto('/all');
 
-		await page.getByLabel(/title/i).fill('Pushed from client');
-		await page.getByRole('button', { name: /add/i }).click();
+		await page.getByLabel('Title').fill('Pushed from client');
+		await page.getByRole('button', { name: 'Add task' }).click();
 
 		// Wait for pendingCount to hit 0 — outbox drained
 		await expect(page.getByRole('button', { name: /synced/i })).toBeVisible({
@@ -105,10 +105,10 @@ test.describe('Sync', { tag: '@sync' }, () => {
 
 	test('sign-out clears local data', async ({ page }) => {
 		if (!config) return;
-		await page.goto('/');
-		await page.getByLabel(/title/i).fill('Will be cleared');
-		await page.getByRole('button', { name: /add/i }).click();
-		await expect(page.getByText('Will be cleared')).toBeVisible();
+		await page.goto('/all');
+		await page.getByLabel('Title').fill('Will be cleared');
+		await page.getByRole('button', { name: 'Add task' }).click();
+		await expect(page.locator('article', { hasText: 'Will be cleared' })).toBeVisible();
 
 		await page.getByRole('button', { name: /sign out/i }).click();
 		await page
@@ -117,6 +117,6 @@ test.describe('Sync', { tag: '@sync' }, () => {
 			.click();
 
 		await expect(page.getByRole('button', { name: /local only.*sign in/i })).toBeVisible();
-		await expect(page.getByText('Will be cleared')).toBeHidden();
+		await expect(page.locator('article', { hasText: 'Will be cleared' })).toHaveCount(0);
 	});
 });

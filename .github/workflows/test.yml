@@ -31,10 +31,10 @@ jobs:
       - run: npm ci
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
-      - name: Build
+      - name: Build with placeholder Supabase env (no real backend needed here)
         env:
-          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          PUBLIC_SUPABASE_URL: https://e2e.example.supabase.co
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: e2e-placeholder-key
         run: npm run build
       - run: npm run test:e2e
       - if: failure()
@@ -56,6 +56,24 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verify required secrets are available
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        run: |
+          missing=()
+          [ -z "${PUBLIC_SUPABASE_URL}" ] && missing+=("PUBLIC_SUPABASE_URL")
+          [ -z "${PUBLIC_SUPABASE_PUBLISHABLE_KEY}" ] && missing+=("PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+          [ -z "${TEST_USER_EMAIL}" ] && missing+=("TEST_USER_EMAIL")
+          [ -z "${TEST_USER_PASSWORD}" ] && missing+=("TEST_USER_PASSWORD")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing repo secrets: ${missing[*]}"
+            echo "If PUBLIC_SUPABASE_* are environment-scoped (e.g. to github-pages), move or copy them to repo secrets so this job can read them."
+            exit 1
+          fi
+          echo "All required secrets are set."
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
       - name: Build
