@@ -3,6 +3,7 @@
 	import { computeStatus } from '$lib/tasks';
 	import { completeTask, uncompleteTask, deleteTask } from '$lib/tasks';
 	import { reloadTasks } from '$lib/store.svelte';
+	import { Button, Card } from '$lib/ui';
 	import TaskEditDialog from './TaskEditDialog.svelte';
 
 	interface Props {
@@ -15,18 +16,21 @@
 
 	const status = $derived(computeStatus(task));
 
-	const urgencyClasses: Record<string, string> = {
-		fresh: 'border-stone-200',
-		soon: 'border-amber-300 bg-amber-50',
-		due: 'border-orange-400 bg-orange-50',
-		overdue: 'border-red-400 bg-red-50'
-	};
-
 	const kindIcon: Record<string, string> = {
 		todo: '☐',
 		recurring: '↻',
 		cadence: '~'
 	};
+
+	const statusLabelClass = $derived(
+		status.urgency === 'overdue'
+			? 'text-danger'
+			: status.urgency === 'due'
+				? 'text-accent'
+				: status.urgency === 'soon'
+					? 'text-warning'
+					: 'text-ink-tertiary'
+	);
 
 	async function markDone() {
 		await completeTask(task.id);
@@ -45,58 +49,52 @@
 	}
 </script>
 
-<article
-	class="flex flex-col gap-2 rounded-lg border bg-white px-4 py-3 shadow-sm {urgencyClasses[
-		status.urgency
-	]}"
->
-	<div class="flex items-start justify-between gap-2">
-		<div class="flex min-w-0 flex-1 items-start gap-2">
-			<span class="mt-0.5 text-stone-400" title={task.kind}>{kindIcon[task.kind]}</span>
-			<div class="min-w-0 flex-1">
-				<h3 class="truncate text-base font-medium">{task.title}</h3>
-				{#if task.notes}
-					<p class="mt-0.5 text-sm text-stone-500">{task.notes}</p>
-				{/if}
-			</div>
-		</div>
-		<span class="text-stone-500 shrink-0 text-xs">{status.label}</span>
-	</div>
-	{#if showActions}
-		<div class="flex flex-wrap gap-2">
-			<button
-				type="button"
-				onclick={markDone}
-				class="rounded-md bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700"
-			>
-				Mark done
-			</button>
-			{#if task.lastCompletedAt}
-				<button
-					type="button"
-					onclick={undo}
-					class="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50"
+<Card tone={status.urgency === 'fresh' ? 'default' : status.urgency}>
+	<div class="flex flex-col gap-3">
+		<div class="flex items-start justify-between gap-3">
+			<div class="flex min-w-0 flex-1 items-start gap-2.5">
+				<span
+					class="text-ink-tertiary mt-0.5 text-base leading-none"
+					title={task.kind}
 				>
-					Undo last
-				</button>
-			{/if}
-			<button
-				type="button"
-				onclick={() => (editing = true)}
-				class="ml-auto rounded-md bg-white px-3 py-1.5 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50"
-			>
-				Edit
-			</button>
-			<button
-				type="button"
-				onclick={remove}
-				class="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-stone-300 hover:bg-red-50"
-			>
-				Delete
-			</button>
+					{kindIcon[task.kind]}
+				</span>
+				<div class="min-w-0 flex-1">
+					<h3 class="text-ink truncate text-base font-medium leading-snug">
+						{task.title}
+					</h3>
+					{#if task.notes}
+						<p class="text-ink-secondary mt-0.5 text-sm leading-snug">
+							{task.notes}
+						</p>
+					{/if}
+				</div>
+			</div>
+			<span class="shrink-0 text-xs font-medium {statusLabelClass}">
+				{status.label}
+			</span>
 		</div>
-	{/if}
-</article>
+		{#if showActions}
+			<div class="flex flex-wrap items-center gap-2">
+				<Button size="sm" onclick={markDone}>Mark done</Button>
+				{#if task.lastCompletedAt}
+					<Button variant="secondary" size="sm" onclick={undo}>
+						Undo last
+					</Button>
+				{/if}
+				<Button
+					variant="ghost"
+					size="sm"
+					class="ml-auto"
+					onclick={() => (editing = true)}
+				>
+					Edit
+				</Button>
+				<Button variant="danger" size="sm" onclick={remove}>Delete</Button>
+			</div>
+		{/if}
+	</div>
+</Card>
 
 {#if editing}
 	<TaskEditDialog {task} onClose={() => (editing = false)} />

@@ -29,12 +29,12 @@
 
 	const dotClass = $derived(
 		syncStatus.state === 'syncing'
-			? 'bg-blue-500 animate-pulse'
+			? 'bg-info animate-pulse'
 			: syncStatus.state === 'error'
-				? 'bg-red-500'
+				? 'bg-danger'
 				: syncStatus.pendingCount > 0
-					? 'bg-yellow-500'
-					: 'bg-green-500'
+					? 'bg-warning'
+					: 'bg-success'
 	);
 </script>
 
@@ -44,9 +44,9 @@
 		onclick={signIn}
 		disabled={signing}
 		title="Sign in with GitHub to back up and sync across devices"
-		class="text-stone-500 hover:text-stone-800 inline-flex items-center gap-1.5 text-xs disabled:opacity-50"
+		class="text-ink-tertiary hover:text-ink inline-flex items-center gap-1.5 text-xs transition-colors disabled:opacity-50"
 	>
-		<span class="h-2 w-2 rounded-full bg-stone-400"></span>
+		<span class="bg-ink-disabled h-2 w-2 rounded-full"></span>
 		{signing ? 'Redirecting…' : 'Local only · Sign in'}
 	</button>
 {:else}
@@ -54,7 +54,7 @@
 		type="button"
 		onclick={() => fullSync()}
 		title={syncStatus.error ?? 'Tap to sync now'}
-		class="text-stone-500 hover:text-stone-800 inline-flex items-center gap-1.5 text-xs"
+		class="text-ink-tertiary hover:text-ink inline-flex items-center gap-1.5 text-xs transition-colors"
 	>
 		<span class="h-2 w-2 rounded-full {dotClass}"></span>
 		{label}
