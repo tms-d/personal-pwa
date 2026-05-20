@@ -111,29 +111,23 @@ dev tunnel for review without the user needing to install anything.
 Constraints worth knowing:
 
 - **Network access** defaults to "Trusted" (allowlist of package
-  registries, GitHub, cloud SDKs). For Cloudflare quick-tunnels, the
-  environment must be set to "Full".
+  registries, GitHub, cloud SDKs).
 - **Secrets**: the platform stores environment variables in plain text
   and warns against credentials. Real secrets (test user creds,
   Supabase keys) live in GitHub Actions **repo-level** secrets;
   env-scoped secrets aren't visible to jobs without an `environment:`
   block. Claude cannot read either kind in-session — only CI can.
 - **Container lifetime**: containers are ephemeral and reclaimed after
-  inactivity. The dev tunnel URL dies with the session. `cloudflared`
-  is installed on demand (see CLAUDE.md → Dev workflow). We tried a
-  setup-script approach to pre-install it, but the script's working
-  directory at setup-time isn't always the repo root, so on-demand
-  install in the session is more reliable.
+  inactivity.
 - **Branch deletes** are rejected by the git proxy — the proxy only
   permits pushes to the current working branch. Clean up old branches
   via the GitHub UI.
 
 ## Preview / review loop
 
-Currently: Claude runs `npm run dev` in the cloud container, exposes it
-via Cloudflare quick-tunnel, hands a URL to the user for phone +
-desktop review. No GitHub Pages preview deploys, no separate Supabase
-project for previews.
+No GitHub Pages preview deploys, no separate Supabase project for
+previews — reviewers look at the deployed app on `main` or pull a
+branch locally.
 
 Considered and rejected: per-branch `gh-pages` deploys via subpaths.
 Too much plumbing (base-path injection, Pages source migration, gh-pages

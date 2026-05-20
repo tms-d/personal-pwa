@@ -104,26 +104,6 @@ Locally: `npm test` (unit + component), `npm run test:e2e`,
 
 - `npm run dev` — local dev, local-only by default (no Supabase env →
   `getSupabase()` returns null, app falls back to Dexie-only mode).
-- When the user asks for a hosted preview of in-progress work (so they
-  can open it on their phone or share a URL), expose the dev server via
-  a Cloudflare quick-tunnel. `cloudflared` is not pre-installed in the
-  container — install it on demand:
-
-  ```sh
-  if ! command -v cloudflared >/dev/null; then
-    curl -fsSL -o /usr/local/bin/cloudflared \
-      https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
-    chmod +x /usr/local/bin/cloudflared
-  fi
-
-  DEV_TUNNEL=1 npm run dev &                            # binds 0.0.0.0, accepts any Host header
-  cloudflared tunnel --url http://localhost:5173 &      # prints a https://*.trycloudflare.com URL
-  ```
-
-  The Claude Code on the web environment must be set to **Full** network
-  access — Trusted blocks `trycloudflare.com`. If the install or the
-  tunnel hangs / 403s, that's the cause; ask the user to flip the
-  Network access setting on the environment.
 
 ## Gotchas worth knowing
 
