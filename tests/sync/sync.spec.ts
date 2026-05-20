@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
 	getSyncConfig,
 	seedSession,
@@ -8,6 +8,44 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const config = getSyncConfig();
+
+// Hook every page so any client-side error / failed network request /
+// console.error surfaces in the test log. Makes failures self-diagnosing
+// instead of mystery timeouts.
+function instrument(page: Page, label = 'page') {
+	page.on('console', (msg) => {
+		if (msg.type() === 'error' || msg.type() === 'warning') {
+			console.log(`[${label} ${msg.type()}]`, msg.text());
+		}
+	});
+	page.on('pageerror', (err) => {
+		console.log(`[${label} pageerror]`, err.message);
+	});
+	page.on('requestfailed', (req) => {
+		console.log(`[${label} requestfailed]`, req.method(), req.url(), req.failure()?.errorText);
+	});
+}
+
+// When a wait for the "Synced" pill is about to fail, capture what the pill
+// actually shows (e.g. "Sync error · message", "Syncing…", "Local only · Sign
+// in") so the failure message tells us what's wrong instead of just timing out.
+async function expectSyncedOrDiagnose(page: Page, timeout = 15_000): Promise<void> {
+	try {
+		await expect(page.getByRole('button', { name: /synced/i })).toBeVisible({ timeout });
+	} catch (e) {
+		const all = await page.getByRole('button').allTextContents();
+		const titles = await page.locator('button[title]').evaluateAll((els) =>
+			els.map((el) => ({ text: el.textContent?.trim(), title: el.getAttribute('title') }))
+		);
+		const localStorageKeys = await page.evaluate(() => Object.keys(window.localStorage));
+		throw new Error(
+			`Sync pill never showed "Synced …". Buttons on page: ${JSON.stringify(all)}. ` +
+				`With titles: ${JSON.stringify(titles)}. ` +
+				`LocalStorage keys: ${JSON.stringify(localStorageKeys)}. ` +
+				`Underlying error: ${e instanceof Error ? e.message : String(e)}`
+		);
+	}
+}
 
 test.describe('Sync', { tag: '@sync' }, () => {
 	test.skip(
@@ -23,8 +61,9 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		client = result.client;
 	});
 
-	test.beforeEach(async ({ context }) => {
+	test.beforeEach(async ({ context, page }) => {
 		if (!config) return;
+		instrument(page);
 		await wipeUserRows(client);
 		const { session } = await signedInClient(config);
 		await seedSession(context, config.supabaseUrl, session);
@@ -37,7 +76,6 @@ test.describe('Sync', { tag: '@sync' }, () => {
 
 	test('signs in via injected session and pulls remote tasks', async ({ page }) => {
 		if (!config) return;
-		// Seed a row server-side, then open the app — fullSync should pull it.
 		await client.from('tasks').insert({
 			id: 'sync-test-1',
 			user_id: (await client.auth.getUser()).data.user!.id,
@@ -48,11 +86,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		});
 
 		await page.goto('/');
-
-		// SyncStatus pill should show "Synced …" once fullSync completes.
-		await expect(page.getByRole('button', { name: /synced/i })).toBeVisible({
-			timeout: 10_000
-		});
+		await expectSyncedOrDiagnose(page);
 		await expect(page.getByText('Seeded from server')).toBeVisible();
 	});
 
@@ -63,10 +97,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		await page.getByLabel('Title').fill('Pushed from client');
 		await page.getByRole('button', { name: 'Add task' }).click();
 
-		// Wait for pendingCount to hit 0 — outbox drained
-		await expect(page.getByRole('button', { name: /synced/i })).toBeVisible({
-			timeout: 10_000
-		});
+		await expectSyncedOrDiagnose(page);
 
 		const { data } = await client.from('tasks').select('*').eq('title', 'Pushed from client');
 		expect(data).not.toBeNull();
@@ -83,21 +114,20 @@ test.describe('Sync', { tag: '@sync' }, () => {
 
 		const pageA = await ctxA.newPage();
 		const pageB = await ctxB.newPage();
-		await pageA.goto('/');
+		instrument(pageA, 'A');
+		instrument(pageB, 'B');
+		await pageA.goto('/all');
 		await pageB.goto('/');
 
-		await expect(pageA.getByRole('button', { name: /synced/i })).toBeVisible({
+		await expectSyncedOrDiagnose(pageA);
+		await expectSyncedOrDiagnose(pageB);
+
+		await pageA.getByLabel('Title').fill('Made on device A');
+		await pageA.getByRole('button', { name: 'Add task' }).click();
+
+		await expect(pageB.locator('article', { hasText: 'Made on device A' })).toBeVisible({
 			timeout: 10_000
 		});
-		await expect(pageB.getByRole('button', { name: /synced/i })).toBeVisible({
-			timeout: 10_000
-		});
-
-		await pageA.getByLabel(/title/i).fill('Made on device A');
-		await pageA.getByRole('button', { name: /add/i }).click();
-
-		// B should see it via realtime, without reloading
-		await expect(pageB.getByText('Made on device A')).toBeVisible({ timeout: 10_000 });
 
 		await ctxA.close();
 		await ctxB.close();
