@@ -1,106 +1,20 @@
-import type { Task, Completion } from './types';
 import { db } from './db';
 import { getSupabase } from './supabase';
 import { authState } from './auth.svelte';
 import { reloadTasks } from './store.svelte';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import {
+	taskToRow,
+	rowToTask,
+	completionToRow,
+	rowToCompletion,
+	isRemoteNewer,
+	outboxId,
+	type TaskRow,
+	type CompletionRow
+} from './sync-helpers';
 
 const LAST_SYNC_KEY = 'ppo:lastSyncAt';
-
-interface TaskRow {
-	id: string;
-	user_id: string;
-	title: string;
-	notes: string | null;
-	tags: string[] | null;
-	kind: string;
-	recurrence_period: string | null;
-	recurrence_every: number | null;
-	recurrence_due_on: string | null;
-	cadence_target_interval_days: number | null;
-	created_at: string;
-	archived_at: string | null;
-	updated_at: string;
-	deleted_at: string | null;
-}
-
-interface CompletionRow {
-	id: string;
-	user_id: string;
-	task_id: string;
-	at: string;
-	updated_at: string;
-	deleted_at: string | null;
-}
-
-function taskToRow(task: Task, userId: string): TaskRow {
-	return {
-		id: task.id,
-		user_id: userId,
-		title: task.title,
-		notes: task.notes ?? null,
-		tags: task.tags ?? null,
-		kind: task.kind,
-		recurrence_period: task.recurrence?.period ?? null,
-		recurrence_every: task.recurrence?.every ?? null,
-		recurrence_due_on:
-			task.recurrence?.dueOn !== undefined ? String(task.recurrence.dueOn) : null,
-		cadence_target_interval_days: task.cadence?.targetIntervalDays ?? null,
-		created_at: task.createdAt,
-		archived_at: task.archivedAt ?? null,
-		updated_at: task.updatedAt,
-		deleted_at: task.deletedAt ?? null
-	};
-}
-
-function rowToTask(row: TaskRow): Task {
-	const task: Task = {
-		id: row.id,
-		title: row.title,
-		notes: row.notes ?? undefined,
-		tags: row.tags ?? undefined,
-		kind: row.kind as Task['kind'],
-		createdAt: row.created_at,
-		archivedAt: row.archived_at ?? undefined,
-		updatedAt: row.updated_at,
-		deletedAt: row.deleted_at ?? undefined
-	};
-	if (row.recurrence_period) {
-		task.recurrence = {
-			period: row.recurrence_period as 'day' | 'week' | 'month' | 'year'
-		};
-		if (row.recurrence_every) task.recurrence.every = row.recurrence_every;
-		if (row.recurrence_due_on !== null) {
-			task.recurrence.dueOn =
-				row.recurrence_due_on === 'end' ? 'end' : Number(row.recurrence_due_on);
-		}
-	}
-	if (row.cadence_target_interval_days !== null) {
-		task.cadence = { targetIntervalDays: row.cadence_target_interval_days };
-	}
-	return task;
-}
-
-function completionToRow(c: Completion, userId: string): CompletionRow {
-	return {
-		id: c.id,
-		user_id: userId,
-		task_id: c.taskId,
-		at: c.at,
-		updated_at: c.updatedAt,
-		deleted_at: c.deletedAt ?? null
-	};
-}
-
-function rowToCompletion(row: CompletionRow): Completion {
-	return {
-		id: row.id,
-		taskId: row.task_id,
-		at: row.at,
-		updatedAt: row.updated_at,
-		deletedAt: row.deleted_at ?? undefined
-	};
-}
 
 interface SyncStatus {
 	enabled: boolean;
@@ -117,10 +31,6 @@ export const syncStatus: SyncStatus = $state({
 	error: null,
 	pendingCount: 0
 });
-
-function outboxId(table: 'tasks' | 'completions', rowId: string): string {
-	return `${table}:${rowId}`;
-}
 
 async function refreshPendingCount(): Promise<void> {
 	syncStatus.pendingCount = await db.outbox.count();
@@ -142,53 +52,57 @@ export async function enqueuePush(
 	void drainOutbox();
 }
 
-let draining = false;
-export async function drainOutbox(): Promise<void> {
+let drainInFlight: Promise<void> | null = null;
+export function drainOutbox(): Promise<void> {
+	if (drainInFlight) return drainInFlight;
 	const sb = getSupabase();
-	if (!sb || !authState.user) return;
-	if (draining) return;
-	if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-	draining = true;
-	try {
-		const userId = authState.user.id;
-		while (true) {
-			const entries = await db.outbox.orderBy('queuedAt').limit(50).toArray();
-			if (entries.length === 0) break;
-			let failed = false;
-			for (const entry of entries) {
-				try {
-					if (entry.table === 'tasks') {
-						const row = await db.tasks.get(entry.rowId);
-						if (!row) {
-							await db.outbox.delete(entry.id);
-							continue;
-						}
-						const { error } = await sb.from('tasks').upsert(taskToRow(row, userId));
-						if (error) throw error;
-					} else {
-						const row = await db.completions.get(entry.rowId);
-						if (!row) {
-							await db.outbox.delete(entry.id);
-							continue;
-						}
-						const { error } = await sb
-							.from('completions')
-							.upsert(completionToRow(row, userId));
-						if (error) throw error;
-					}
-					await db.outbox.delete(entry.id);
-				} catch (e) {
-					console.warn('outbox drain failed for', entry.id, e);
-					failed = true;
-					break;
-				}
-			}
-			if (failed) break;
-		}
-	} finally {
-		draining = false;
-		await refreshPendingCount();
+	if (!sb || !authState.user) return Promise.resolve();
+	if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+		return Promise.resolve();
 	}
+	const userId = authState.user.id;
+	drainInFlight = (async () => {
+		try {
+			while (true) {
+				const entries = await db.outbox.orderBy('queuedAt').limit(50).toArray();
+				if (entries.length === 0) break;
+				let failed = false;
+				for (const entry of entries) {
+					try {
+						if (entry.table === 'tasks') {
+							const row = await db.tasks.get(entry.rowId);
+							if (!row) {
+								await db.outbox.delete(entry.id);
+								continue;
+							}
+							const { error } = await sb.from('tasks').upsert(taskToRow(row, userId));
+							if (error) throw error;
+						} else {
+							const row = await db.completions.get(entry.rowId);
+							if (!row) {
+								await db.outbox.delete(entry.id);
+								continue;
+							}
+							const { error } = await sb
+								.from('completions')
+								.upsert(completionToRow(row, userId));
+							if (error) throw error;
+						}
+						await db.outbox.delete(entry.id);
+					} catch (e) {
+						console.warn('outbox drain failed for', entry.id, e);
+						failed = true;
+						break;
+					}
+				}
+				if (failed) break;
+			}
+		} finally {
+			await refreshPendingCount();
+			drainInFlight = null;
+		}
+	})();
+	return drainInFlight;
 }
 
 export async function fullSync(): Promise<void> {
@@ -230,19 +144,20 @@ export async function fullSync(): Promise<void> {
 		const { data: completionRows, error: ce } = await sb.from('completions').select('*');
 		if (ce) throw ce;
 
-		// 3. Merge into local. Last-write-wins on updatedAt.
+		// 3. Merge into local. Last-write-wins on updatedAt (non-strict so equal
+		//    timestamps still re-put — harmless and keeps merge symmetric).
 		await db.transaction('rw', db.tasks, db.completions, async () => {
 			for (const r of (taskRows ?? []) as TaskRow[]) {
 				const remote = rowToTask(r);
 				const local = await db.tasks.get(remote.id);
-				if (!local || remote.updatedAt >= local.updatedAt) {
+				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, false)) {
 					await db.tasks.put(remote);
 				}
 			}
 			for (const r of (completionRows ?? []) as CompletionRow[]) {
 				const remote = rowToCompletion(r);
 				const local = await db.completions.get(remote.id);
-				if (!local || remote.updatedAt >= local.updatedAt) {
+				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, false)) {
 					await db.completions.put(remote);
 				}
 			}
@@ -293,7 +208,7 @@ export function subscribeRealtime(): void {
 				if (!next || !next.id) return;
 				const remote = rowToTask(next as TaskRow);
 				const local = await db.tasks.get(remote.id);
-				if (!local || remote.updatedAt > local.updatedAt) {
+				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, true)) {
 					await db.tasks.put(remote);
 					scheduleReload();
 				}
@@ -307,7 +222,7 @@ export function subscribeRealtime(): void {
 				if (!next || !next.id) return;
 				const remote = rowToCompletion(next as CompletionRow);
 				const local = await db.completions.get(remote.id);
-				if (!local || remote.updatedAt > local.updatedAt) {
+				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, true)) {
 					await db.completions.put(remote);
 					scheduleReload();
 				}
