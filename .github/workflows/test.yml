@@ -31,7 +31,7 @@ jobs:
       - run: npm ci
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
-      - name: Build with placeholder Supabase env (no real backend needed here)
+      - name: Build (placeholder Supabase env — no real backend calls in this job, but values must be present so the client is included and configured=true)
         env:
           PUBLIC_SUPABASE_URL: https://e2e.example.supabase.co
           PUBLIC_SUPABASE_PUBLISHABLE_KEY: e2e-placeholder-key

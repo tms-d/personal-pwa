@@ -4,6 +4,10 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
+	// Inline PUBLIC_* via import.meta.env at build time. Required for
+	// adapter-static SPAs: $env/dynamic/public ships empty when there's
+	// no SSR pass to populate it.
+	envPrefix: ['VITE_', 'PUBLIC_'],
 	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
 	test: {
 		environment: 'jsdom',
