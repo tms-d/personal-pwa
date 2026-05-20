@@ -3,30 +3,48 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { reloadTasks } from '$lib/store.svelte';
-	import { authState, initAuth, onAuthChange, signOut } from '$lib/auth.svelte';
-	import { fullSync, loadLastSyncedAt, syncStatus } from '$lib/sync.svelte';
-	import SignInCard from '$lib/components/SignInCard.svelte';
+	import { authState, initAuth, onAuthChange } from '$lib/auth.svelte';
+	import {
+		fullSync,
+		loadLastSyncedAt,
+		subscribeRealtime,
+		unsubscribeRealtime,
+		drainOutbox
+	} from '$lib/sync.svelte';
 	import SyncStatus from '$lib/components/SyncStatus.svelte';
+	import SignOutDialog from '$lib/components/SignOutDialog.svelte';
 
 	let { children } = $props();
+	let signOutOpen = $state(false);
 
 	onMount(() => {
 		loadLastSyncedAt();
 		reloadTasks();
 		initAuth();
 
-		const stopAuth = onAuthChange((user) => {
-			if (user) void fullSync();
+		const stopAuth = onAuthChange(async (user) => {
+			if (user) {
+				subscribeRealtime();
+				await fullSync();
+			} else {
+				await unsubscribeRealtime();
+			}
 		});
 
 		const onFocus = () => {
 			if (authState.user) void fullSync();
 		};
+		const onOnline = () => {
+			if (authState.user) void drainOutbox();
+		};
 		window.addEventListener('focus', onFocus);
+		window.addEventListener('online', onOnline);
 
 		return () => {
 			stopAuth();
 			window.removeEventListener('focus', onFocus);
+			window.removeEventListener('online', onOnline);
+			void unsubscribeRealtime();
 		};
 	});
 
@@ -45,17 +63,17 @@
 <div class="mx-auto flex min-h-screen max-w-2xl flex-col">
 	<header class="flex items-start justify-between px-4 pt-6 pb-3">
 		<h1 class="text-xl font-semibold tracking-tight">Personal Priority Overview</h1>
-		{#if authState.user}
+		{#if authState.configured && !authState.loading}
 			<div class="flex flex-col items-end gap-1">
-				<button
-					type="button"
-					onclick={() => signOut()}
-					class="text-stone-500 hover:text-stone-800 text-xs"
-				>
-					Sign out
-				</button>
-				{#if syncStatus.enabled}
-					<SyncStatus />
+				<SyncStatus />
+				{#if authState.user}
+					<button
+						type="button"
+						onclick={() => (signOutOpen = true)}
+						class="text-stone-500 hover:text-stone-800 text-xs"
+					>
+						Sign out
+					</button>
 				{/if}
 			</div>
 		{/if}
@@ -78,9 +96,7 @@
 
 	<main class="flex flex-1 flex-col gap-4 px-4 py-4">
 		{@render children()}
-
-		{#if authState.configured && !authState.loading && !authState.user}
-			<SignInCard />
-		{/if}
 	</main>
 </div>
+
+<SignOutDialog bind:open={signOutOpen} />

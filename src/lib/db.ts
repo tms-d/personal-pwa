@@ -1,9 +1,17 @@
 import Dexie, { type Table } from 'dexie';
 import type { Task, Completion } from './types';
 
+export interface OutboxEntry {
+	id: string;
+	table: 'tasks' | 'completions';
+	rowId: string;
+	queuedAt: string;
+}
+
 export class PPODB extends Dexie {
 	tasks!: Table<Task, string>;
 	completions!: Table<Completion, string>;
+	outbox!: Table<OutboxEntry, string>;
 
 	constructor() {
 		super('ppo');
@@ -31,6 +39,11 @@ export class PPODB extends Dexie {
 						c.updatedAt = c.at ?? now;
 					});
 			});
+		this.version(3).stores({
+			tasks: 'id, kind, archivedAt, createdAt, updatedAt, deletedAt',
+			completions: 'id, taskId, at, updatedAt, deletedAt',
+			outbox: 'id, queuedAt'
+		});
 	}
 }
 
