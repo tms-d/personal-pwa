@@ -114,7 +114,7 @@
 
 <!-- Desktop left rail -->
 <aside
-	class="border-border-subtle bg-elevated/40 fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r px-4 py-7 md:flex"
+	class="border-border-subtle bg-elevated/40 fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r px-4 pb-7 pt-[calc(env(safe-area-inset-top)+1.75rem)] md:flex"
 	aria-label="Primary"
 >
 	<nav class="flex flex-col gap-1">
@@ -159,7 +159,9 @@
 <!-- Main column -->
 <div class="md:pl-60">
 	<div class="mx-auto flex min-h-screen max-w-2xl flex-col">
-		<header class="flex items-start justify-between px-5 pt-7 pb-4">
+		<header
+			class="flex items-start justify-between px-5 pb-4 pt-[calc(env(safe-area-inset-top)+1.75rem)]"
+		>
 			<div class="flex flex-col gap-0.5">
 				<span
 					class="text-ink-tertiary text-[11px] font-medium uppercase tracking-[0.15em]"
