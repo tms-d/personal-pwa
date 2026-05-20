@@ -3,6 +3,7 @@ import { db } from './db';
 import { getSupabase } from './supabase';
 import { authState } from './auth.svelte';
 import { reloadTasks } from './store.svelte';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 const LAST_SYNC_KEY = 'ppo:lastSyncAt';
 
@@ -106,36 +107,87 @@ interface SyncStatus {
 	state: 'idle' | 'syncing' | 'error';
 	lastSyncedAt: string | null;
 	error: string | null;
+	pendingCount: number;
 }
 
 export const syncStatus: SyncStatus = $state({
 	enabled: false,
 	state: 'idle',
 	lastSyncedAt: null,
-	error: null
+	error: null,
+	pendingCount: 0
 });
 
-export async function pushTask(task: Task): Promise<void> {
-	const sb = getSupabase();
-	if (!sb || !authState.user) return;
-	try {
-		const { error } = await sb.from('tasks').upsert(taskToRow(task, authState.user.id));
-		if (error) throw error;
-	} catch (e) {
-		console.warn('pushTask failed', e);
-	}
+function outboxId(table: 'tasks' | 'completions', rowId: string): string {
+	return `${table}:${rowId}`;
 }
 
-export async function pushCompletion(c: Completion): Promise<void> {
+async function refreshPendingCount(): Promise<void> {
+	syncStatus.pendingCount = await db.outbox.count();
+}
+
+export async function enqueuePush(
+	table: 'tasks' | 'completions',
+	rowId: string
+): Promise<void> {
 	const sb = getSupabase();
 	if (!sb || !authState.user) return;
+	await db.outbox.put({
+		id: outboxId(table, rowId),
+		table,
+		rowId,
+		queuedAt: new Date().toISOString()
+	});
+	await refreshPendingCount();
+	void drainOutbox();
+}
+
+let draining = false;
+export async function drainOutbox(): Promise<void> {
+	const sb = getSupabase();
+	if (!sb || !authState.user) return;
+	if (draining) return;
+	if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+	draining = true;
 	try {
-		const { error } = await sb
-			.from('completions')
-			.upsert(completionToRow(c, authState.user.id));
-		if (error) throw error;
-	} catch (e) {
-		console.warn('pushCompletion failed', e);
+		const userId = authState.user.id;
+		while (true) {
+			const entries = await db.outbox.orderBy('queuedAt').limit(50).toArray();
+			if (entries.length === 0) break;
+			let failed = false;
+			for (const entry of entries) {
+				try {
+					if (entry.table === 'tasks') {
+						const row = await db.tasks.get(entry.rowId);
+						if (!row) {
+							await db.outbox.delete(entry.id);
+							continue;
+						}
+						const { error } = await sb.from('tasks').upsert(taskToRow(row, userId));
+						if (error) throw error;
+					} else {
+						const row = await db.completions.get(entry.rowId);
+						if (!row) {
+							await db.outbox.delete(entry.id);
+							continue;
+						}
+						const { error } = await sb
+							.from('completions')
+							.upsert(completionToRow(row, userId));
+						if (error) throw error;
+					}
+					await db.outbox.delete(entry.id);
+				} catch (e) {
+					console.warn('outbox drain failed for', entry.id, e);
+					failed = true;
+					break;
+				}
+			}
+			if (failed) break;
+		}
+	} finally {
+		draining = false;
+		await refreshPendingCount();
 	}
 }
 
@@ -153,8 +205,8 @@ export async function fullSync(): Promise<void> {
 	const userId = authState.user.id;
 
 	try {
-		// 1. Push all local rows. Upsert is idempotent; for unchanged rows the
-		//    server's updated_at trigger will bump but the row content is the same.
+		// 1. Push everything local — idempotent upsert. Covers rows created before
+		//    sign-in (which never got into the outbox).
 		const localTasks = await db.tasks.toArray();
 		const localCompletions = await db.completions.toArray();
 
@@ -170,14 +222,15 @@ export async function fullSync(): Promise<void> {
 				.upsert(localCompletions.map((c) => completionToRow(c, userId)));
 			if (error) throw error;
 		}
+		await db.outbox.clear();
 
-		// 2. Pull everything from server (small dataset, simpler than diffing).
+		// 2. Pull everything from server.
 		const { data: taskRows, error: te } = await sb.from('tasks').select('*');
 		if (te) throw te;
 		const { data: completionRows, error: ce } = await sb.from('completions').select('*');
 		if (ce) throw ce;
 
-		// 3. Merge into local. Last-write-wins on updated_at.
+		// 3. Merge into local. Last-write-wins on updatedAt.
 		await db.transaction('rw', db.tasks, db.completions, async () => {
 			for (const r of (taskRows ?? []) as TaskRow[]) {
 				const remote = rowToTask(r);
@@ -203,6 +256,7 @@ export async function fullSync(): Promise<void> {
 		}
 		syncStatus.lastSyncedAt = now;
 		syncStatus.state = 'idle';
+		await refreshPendingCount();
 
 		await reloadTasks();
 	} catch (e) {
@@ -212,10 +266,87 @@ export async function fullSync(): Promise<void> {
 	}
 }
 
+let realtimeChannel: RealtimeChannel | null = null;
+let reloadDebounce: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleReload(): void {
+	if (reloadDebounce) clearTimeout(reloadDebounce);
+	reloadDebounce = setTimeout(() => {
+		reloadDebounce = null;
+		void reloadTasks();
+	}, 150);
+}
+
+export function subscribeRealtime(): void {
+	const sb = getSupabase();
+	if (!sb || !authState.user) return;
+	if (realtimeChannel) return;
+	const userId = authState.user.id;
+	const filter = `user_id=eq.${userId}`;
+	realtimeChannel = sb
+		.channel(`ppo:${userId}`)
+		.on(
+			'postgres_changes',
+			{ event: '*', schema: 'public', table: 'tasks', filter },
+			async (payload) => {
+				const next = payload.new as Partial<TaskRow> | undefined;
+				if (!next || !next.id) return;
+				const remote = rowToTask(next as TaskRow);
+				const local = await db.tasks.get(remote.id);
+				if (!local || remote.updatedAt > local.updatedAt) {
+					await db.tasks.put(remote);
+					scheduleReload();
+				}
+			}
+		)
+		.on(
+			'postgres_changes',
+			{ event: '*', schema: 'public', table: 'completions', filter },
+			async (payload) => {
+				const next = payload.new as Partial<CompletionRow> | undefined;
+				if (!next || !next.id) return;
+				const remote = rowToCompletion(next as CompletionRow);
+				const local = await db.completions.get(remote.id);
+				if (!local || remote.updatedAt > local.updatedAt) {
+					await db.completions.put(remote);
+					scheduleReload();
+				}
+			}
+		)
+		.subscribe();
+}
+
+export async function unsubscribeRealtime(): Promise<void> {
+	if (!realtimeChannel) return;
+	const sb = getSupabase();
+	const channel = realtimeChannel;
+	realtimeChannel = null;
+	if (sb) await sb.removeChannel(channel);
+}
+
+export async function clearLocalData(): Promise<void> {
+	await db.transaction('rw', db.tasks, db.completions, db.outbox, async () => {
+		await db.tasks.clear();
+		await db.completions.clear();
+		await db.outbox.clear();
+	});
+	syncStatus.pendingCount = 0;
+	syncStatus.lastSyncedAt = null;
+	syncStatus.state = 'idle';
+	syncStatus.error = null;
+	try {
+		localStorage.removeItem(LAST_SYNC_KEY);
+	} catch {
+		// ignore
+	}
+	await reloadTasks();
+}
+
 export function loadLastSyncedAt(): void {
 	try {
 		syncStatus.lastSyncedAt = localStorage.getItem(LAST_SYNC_KEY);
 	} catch {
 		// ignore
 	}
+	void refreshPendingCount();
 }

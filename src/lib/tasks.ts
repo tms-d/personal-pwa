@@ -1,6 +1,6 @@
 import type { Task, TaskWithLast, Period } from './types';
 import { db, uid } from './db';
-import { pushTask, pushCompletion } from './sync.svelte';
+import { enqueuePush } from './sync.svelte';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -148,7 +148,7 @@ export async function createTask(
 		updatedAt: now
 	};
 	await db.tasks.add(task);
-	void pushTask(task);
+	void enqueuePush('tasks', task.id);
 	return task;
 }
 
@@ -166,7 +166,7 @@ export async function updateTask(
 		updatedAt: new Date().toISOString()
 	};
 	await db.tasks.put(updated);
-	void pushTask(updated);
+	void enqueuePush('tasks', updated.id);
 	return updated;
 }
 
@@ -179,7 +179,7 @@ export async function completeTask(taskId: string, at = new Date()): Promise<voi
 		updatedAt: now
 	};
 	await db.completions.add(completion);
-	void pushCompletion(completion);
+	void enqueuePush('completions', completion.id);
 }
 
 export async function uncompleteTask(taskId: string): Promise<void> {
@@ -194,7 +194,7 @@ export async function uncompleteTask(taskId: string): Promise<void> {
 	const now = new Date().toISOString();
 	const updated = { ...target, deletedAt: now, updatedAt: now };
 	await db.completions.put(updated);
-	void pushCompletion(updated);
+	void enqueuePush('completions', updated.id);
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
@@ -203,7 +203,7 @@ export async function deleteTask(taskId: string): Promise<void> {
 	if (!task) return;
 	const updatedTask = { ...task, deletedAt: now, updatedAt: now };
 	await db.tasks.put(updatedTask);
-	void pushTask(updatedTask);
+	void enqueuePush('tasks', updatedTask.id);
 
 	const completions = await db.completions
 		.where('taskId')
@@ -213,6 +213,6 @@ export async function deleteTask(taskId: string): Promise<void> {
 	for (const c of completions) {
 		const updated = { ...c, deletedAt: now, updatedAt: now };
 		await db.completions.put(updated);
-		void pushCompletion(updated);
+		void enqueuePush('completions', updated.id);
 	}
 }
