@@ -14,12 +14,10 @@ const config = getSyncConfig();
 // instead of mystery timeouts.
 function instrument(page: Page, label = 'page') {
 	page.on('console', (msg) => {
-		if (msg.type() === 'error' || msg.type() === 'warning') {
-			console.log(`[${label} ${msg.type()}]`, msg.text());
-		}
+		console.log(`[${label} ${msg.type()}]`, msg.text());
 	});
 	page.on('pageerror', (err) => {
-		console.log(`[${label} pageerror]`, err.message);
+		console.log(`[${label} pageerror]`, err.message, err.stack);
 	});
 	page.on('requestfailed', (req) => {
 		console.log(`[${label} requestfailed]`, req.method(), req.url(), req.failure()?.errorText);

@@ -105,6 +105,22 @@ export function drainOutbox(): Promise<void> {
 	return drainInFlight;
 }
 
+function errorMessage(e: unknown): string {
+	if (e instanceof Error) return e.message;
+	if (typeof e === 'object' && e !== null) {
+		const obj = e as { message?: unknown; code?: unknown };
+		if (typeof obj.message === 'string') {
+			return obj.code ? `${obj.message} (code ${obj.code})` : obj.message;
+		}
+		try {
+			return JSON.stringify(e);
+		} catch {
+			// fall through
+		}
+	}
+	return String(e);
+}
+
 export async function fullSync(): Promise<void> {
 	const sb = getSupabase();
 	if (!sb || !authState.user) {
@@ -176,7 +192,7 @@ export async function fullSync(): Promise<void> {
 		await reloadTasks();
 	} catch (e) {
 		syncStatus.state = 'error';
-		syncStatus.error = e instanceof Error ? e.message : String(e);
+		syncStatus.error = errorMessage(e);
 		console.error('fullSync failed', e);
 	}
 }
