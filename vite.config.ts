@@ -9,6 +9,11 @@ export default defineConfig({
 	// no SSR pass to populate it.
 	envPrefix: ['VITE_', 'PUBLIC_'],
 	resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
+	// Opt-in: when DEV_TUNNEL=1, bind the dev server to all interfaces and
+	// accept any host header so a Cloudflare quick-tunnel can proxy to it.
+	server: process.env.DEV_TUNNEL
+		? { host: '0.0.0.0', allowedHosts: true }
+		: undefined,
 	test: {
 		environment: 'jsdom',
 		setupFiles: ['./tests/setup.ts'],
