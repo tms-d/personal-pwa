@@ -119,8 +119,11 @@ Constraints worth knowing:
   env-scoped secrets aren't visible to jobs without an `environment:`
   block. Claude cannot read either kind in-session — only CI can.
 - **Container lifetime**: containers are ephemeral and reclaimed after
-  inactivity. The dev tunnel URL dies with the session.
-  `scripts/setup.sh` makes re-spinning cheap.
+  inactivity. The dev tunnel URL dies with the session. `cloudflared`
+  is installed on demand (see CLAUDE.md → Dev workflow). We tried a
+  setup-script approach to pre-install it, but the script's working
+  directory at setup-time isn't always the repo root, so on-demand
+  install in the session is more reliable.
 - **Branch deletes** are rejected by the git proxy — the proxy only
   permits pushes to the current working branch. Clean up old branches
   via the GitHub UI.
