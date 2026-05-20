@@ -1,0 +1,96 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: Unit + component tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+  e2e:
+    name: E2E (no auth)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Build (placeholder Supabase env — no real backend calls in this job, but values must be present so the client is included and configured=true)
+        env:
+          PUBLIC_SUPABASE_URL: https://e2e.example.supabase.co
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: e2e-placeholder-key
+        run: npm run build
+      - run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-report
+          path: playwright-report/
+          retention-days: 14
+
+  sync:
+    name: E2E sync (signed in)
+    runs-on: ubuntu-latest
+    # Skip on forks where secrets aren't available
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify required secrets are available
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        run: |
+          missing=()
+          [ -z "${PUBLIC_SUPABASE_URL}" ] && missing+=("PUBLIC_SUPABASE_URL")
+          [ -z "${PUBLIC_SUPABASE_PUBLISHABLE_KEY}" ] && missing+=("PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+          [ -z "${TEST_USER_EMAIL}" ] && missing+=("TEST_USER_EMAIL")
+          [ -z "${TEST_USER_PASSWORD}" ] && missing+=("TEST_USER_PASSWORD")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing repo secrets: ${missing[*]}"
+            echo "If PUBLIC_SUPABASE_* are environment-scoped (e.g. to github-pages), move or copy them to repo secrets so this job can read them."
+            exit 1
+          fi
+          echo "All required secrets are set."
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Build
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+      - name: Run sync tests
+        env:
+          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        run: npm run test:sync
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-sync-report
+          path: playwright-report/
+          retention-days: 14

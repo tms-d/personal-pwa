@@ -1,0 +1,200 @@
+import { describe, it, expect } from 'vitest';
+import {
+	taskToRow,
+	rowToTask,
+	completionToRow,
+	rowToCompletion,
+	isRemoteNewer,
+	outboxId,
+	type TaskRow,
+	type CompletionRow
+} from '$lib/sync-helpers';
+import type { Task, Completion } from '$lib/types';
+
+const USER_ID = 'user-1';
+
+describe('taskToRow / rowToTask roundtrip', () => {
+	it('roundtrips a minimal todo', () => {
+		const task: Task = {
+			id: 't1',
+			title: 'Hello',
+			kind: 'todo',
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		const back = rowToTask(taskToRow(task, USER_ID));
+		expect(back).toEqual(task);
+	});
+
+	it('roundtrips a recurring task with all fields', () => {
+		const task: Task = {
+			id: 't2',
+			title: 'Weekly review',
+			notes: 'on Sunday',
+			tags: ['work', 'review'],
+			kind: 'recurring',
+			recurrence: { period: 'week', every: 1, dueOn: 7 },
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-02T00:00:00.000Z',
+			archivedAt: '2026-05-03T00:00:00.000Z'
+		};
+		const back = rowToTask(taskToRow(task, USER_ID));
+		expect(back).toEqual(task);
+	});
+
+	it('roundtrips dueOn = "end"', () => {
+		const task: Task = {
+			id: 't3',
+			title: 'Pay rent',
+			kind: 'recurring',
+			recurrence: { period: 'month', dueOn: 'end' },
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		const back = rowToTask(taskToRow(task, USER_ID));
+		expect(back.recurrence?.dueOn).toBe('end');
+	});
+
+	it('roundtrips a cadence task', () => {
+		const task: Task = {
+			id: 't4',
+			title: 'Call mom',
+			kind: 'cadence',
+			cadence: { targetIntervalDays: 14 },
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		const back = rowToTask(taskToRow(task, USER_ID));
+		expect(back).toEqual(task);
+	});
+
+	it('row → task drops nulls into undefined', () => {
+		const row: TaskRow = {
+			id: 't5',
+			user_id: USER_ID,
+			title: 'X',
+			notes: null,
+			tags: null,
+			kind: 'todo',
+			recurrence_period: null,
+			recurrence_every: null,
+			recurrence_due_on: null,
+			cadence_target_interval_days: null,
+			created_at: '2026-05-01T00:00:00.000Z',
+			archived_at: null,
+			updated_at: '2026-05-01T00:00:00.000Z',
+			deleted_at: null
+		};
+		const task = rowToTask(row);
+		expect(task.notes).toBeUndefined();
+		expect(task.tags).toBeUndefined();
+		expect(task.archivedAt).toBeUndefined();
+		expect(task.recurrence).toBeUndefined();
+		expect(task.cadence).toBeUndefined();
+	});
+});
+
+describe('completionToRow / rowToCompletion roundtrip', () => {
+	it('roundtrips a completion', () => {
+		const c: Completion = {
+			id: 'c1',
+			taskId: 't1',
+			at: '2026-05-20T10:00:00.000Z',
+			updatedAt: '2026-05-20T10:00:00.000Z'
+		};
+		expect(rowToCompletion(completionToRow(c, USER_ID))).toEqual(c);
+	});
+
+	it('roundtrips a soft-deleted completion', () => {
+		const c: Completion = {
+			id: 'c2',
+			taskId: 't1',
+			at: '2026-05-20T10:00:00.000Z',
+			updatedAt: '2026-05-20T10:01:00.000Z',
+			deletedAt: '2026-05-20T10:01:00.000Z'
+		};
+		expect(rowToCompletion(completionToRow(c, USER_ID))).toEqual(c);
+	});
+});
+
+describe('isRemoteNewer', () => {
+	const A = '2026-05-20T10:00:00.000Z';
+	const B = '2026-05-20T10:00:01.000Z';
+
+	it('returns true when local is missing', () => {
+		expect(isRemoteNewer(undefined, A, false)).toBe(true);
+		expect(isRemoteNewer(undefined, A, true)).toBe(true);
+	});
+
+	it('strict: equal timestamps do NOT count as newer', () => {
+		expect(isRemoteNewer(A, A, true)).toBe(false);
+	});
+
+	it('non-strict: equal timestamps DO count as newer', () => {
+		expect(isRemoteNewer(A, A, false)).toBe(true);
+	});
+
+	it('strictly newer remote always wins', () => {
+		expect(isRemoteNewer(A, B, true)).toBe(true);
+		expect(isRemoteNewer(A, B, false)).toBe(true);
+	});
+
+	it('older remote always loses', () => {
+		expect(isRemoteNewer(B, A, true)).toBe(false);
+		expect(isRemoteNewer(B, A, false)).toBe(false);
+	});
+});
+
+describe('outboxId', () => {
+	it('produces a deterministic key per (table, id)', () => {
+		expect(outboxId('tasks', 'abc')).toBe('tasks:abc');
+		expect(outboxId('completions', 'abc')).toBe('completions:abc');
+		expect(outboxId('tasks', 'abc')).toBe(outboxId('tasks', 'abc'));
+	});
+});
+
+// Small consistency check on shapes (helps catch interface drift between
+// helpers and the rest of the codebase).
+describe('row shapes', () => {
+	it('TaskRow has expected keys', () => {
+		const task: Task = {
+			id: 't',
+			title: 'x',
+			kind: 'todo',
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		const row = taskToRow(task, USER_ID);
+		expect(Object.keys(row).sort()).toEqual(
+			[
+				'archived_at',
+				'cadence_target_interval_days',
+				'created_at',
+				'deleted_at',
+				'id',
+				'kind',
+				'notes',
+				'recurrence_due_on',
+				'recurrence_every',
+				'recurrence_period',
+				'tags',
+				'title',
+				'updated_at',
+				'user_id'
+			].sort()
+		);
+	});
+
+	it('CompletionRow has expected keys', () => {
+		const c: Completion = {
+			id: 'c',
+			taskId: 't',
+			at: '2026-05-20T10:00:00.000Z',
+			updatedAt: '2026-05-20T10:00:00.000Z'
+		};
+		const row: CompletionRow = completionToRow(c, USER_ID);
+		expect(Object.keys(row).sort()).toEqual(
+			['at', 'deleted_at', 'id', 'task_id', 'updated_at', 'user_id'].sort()
+		);
+	});
+});
