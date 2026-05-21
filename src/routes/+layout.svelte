@@ -14,6 +14,7 @@
 	import SyncStatus from '$lib/components/SyncStatus.svelte';
 	import SignOutDialog from '$lib/components/SignOutDialog.svelte';
 	import TaskFormSheet from '$lib/components/TaskFormSheet.svelte';
+	import { slide, fly, fade } from 'svelte/transition';
 
 	let { children } = $props();
 	let signOutOpen = $state(false);
@@ -273,7 +274,16 @@
 	</nav>
 
 	{#if authState.configured && !authState.loading}
-		<div class="relative mt-auto">
+		<div class="mt-auto flex flex-col">
+			{#if accountOpenDesktop}
+				<div
+					transition:slide={{ duration: 180 }}
+					class="border-border-subtle mb-1.5 overflow-hidden rounded-lg border bg-elevated/70 p-1.5"
+					role="menu"
+				>
+					{@render accountItems(closeAccountDesktop)}
+				</div>
+			{/if}
 			<button
 				type="button"
 				onclick={() => (accountOpenDesktop = !accountOpenDesktop)}
@@ -289,25 +299,10 @@
 					{@render personIcon('h-4 w-4')}
 				</span>
 				<span class="text-ink flex-1 text-left text-sm font-medium">Account</span>
-				<span class="text-ink-tertiary transition-transform" class:rotate-180={accountOpenDesktop}>
+				<span class="text-ink-tertiary transition-transform" class:rotate-180={!accountOpenDesktop}>
 					{@render chevronIcon('h-3.5 w-3.5')}
 				</span>
 			</button>
-			{#if accountOpenDesktop}
-				<!-- click-outside catcher -->
-				<button
-					type="button"
-					aria-label="Close account menu"
-					class="fixed inset-0 z-40 cursor-default"
-					onclick={closeAccountDesktop}
-				></button>
-				<div
-					class="bg-elevated border-border-subtle absolute bottom-full left-0 right-0 z-50 mb-2 flex flex-col rounded-xl border p-1.5 shadow-[var(--shadow-paper-overlay)]"
-					role="menu"
-				>
-					{@render accountItems(closeAccountDesktop)}
-				</div>
-			{/if}
 		</div>
 	{/if}
 </aside>
@@ -384,21 +379,47 @@
 	</div>
 </nav>
 
-<!-- Mobile account bottom sheet -->
+<!-- Mobile account drawer (slides in from the right) -->
 {#if accountOpenMobile}
 	<button
 		type="button"
 		aria-label="Close account menu"
 		class="fixed inset-0 z-50 cursor-default bg-black/40 backdrop-blur-sm md:hidden"
 		onclick={closeAccountMobile}
+		transition:fade={{ duration: 150 }}
 	></button>
 	<div
-		class="bg-elevated border-border-subtle fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[var(--shadow-paper-overlay)] md:hidden"
+		class="bg-elevated border-border-subtle fixed inset-y-0 right-0 z-50 flex w-[min(86vw,320px)] flex-col border-l shadow-[var(--shadow-paper-overlay)] md:hidden"
 		role="dialog"
 		aria-label="Account"
+		transition:fly={{ x: 360, duration: 220 }}
 	>
-		<div class="bg-border-strong mx-auto mb-3 h-1 w-10 rounded-full"></div>
-		<div class="flex flex-col">
+		<header
+			class="border-border-subtle flex items-center justify-between border-b px-4 pb-3 pt-[calc(env(safe-area-inset-top)+1rem)]"
+		>
+			<span class="text-ink text-sm font-semibold">Account</span>
+			<button
+				type="button"
+				onclick={closeAccountMobile}
+				aria-label="Close"
+				class="text-ink-tertiary hover:text-ink -mr-1 rounded-md p-1 transition-colors"
+			>
+				<svg
+					viewBox="0 0 24 24"
+					class="h-5 w-5"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="1.75"
+					stroke-linecap="round"
+					aria-hidden="true"
+				>
+					<path d="M6 6l12 12M18 6L6 18" />
+				</svg>
+			</button>
+		</header>
+		<div
+			class="flex flex-1 flex-col gap-0.5 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+		>
 			{@render accountItems(closeAccountMobile)}
 		</div>
 	</div>
