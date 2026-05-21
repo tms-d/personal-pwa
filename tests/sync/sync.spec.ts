@@ -9,6 +9,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const config = getSyncConfig();
 
+async function addTodo(page: Page, title: string) {
+	await page.getByRole('button', { name: 'New task' }).first().click();
+	const dialog = page.getByRole('dialog').filter({ hasText: 'New task' });
+	await dialog.getByLabel('Title').fill(title);
+	await dialog.getByRole('button', { name: 'Add task' }).click();
+}
+
 // Hook every page so any client-side error / failed network request /
 // console.error surfaces in the test log. Makes failures self-diagnosing
 // instead of mystery timeouts.
@@ -92,8 +99,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		if (!config) return;
 		await page.goto('/all');
 
-		await page.getByLabel('Title').fill('Pushed from client');
-		await page.getByRole('button', { name: 'Add task' }).click();
+		await addTodo(page, 'Pushed from client');
 
 		await expectSyncedOrDiagnose(page);
 
@@ -120,8 +126,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		await expectSyncedOrDiagnose(pageA);
 		await expectSyncedOrDiagnose(pageB);
 
-		await pageA.getByLabel('Title').fill('Made on device A');
-		await pageA.getByRole('button', { name: 'Add task' }).click();
+		await addTodo(pageA, 'Made on device A');
 
 		await expect(pageB.locator('article', { hasText: 'Made on device A' })).toBeVisible({
 			timeout: 10_000
@@ -134,17 +139,19 @@ test.describe('Sync', { tag: '@sync' }, () => {
 	test('sign-out clears local data', async ({ page }) => {
 		if (!config) return;
 		await page.goto('/all');
-		await page.getByLabel('Title').fill('Will be cleared');
-		await page.getByRole('button', { name: 'Add task' }).click();
+		await addTodo(page, 'Will be cleared');
 		await expect(page.locator('article', { hasText: 'Will be cleared' })).toBeVisible();
 
+		// Sign out lives in the Account menu.
+		await page.getByRole('button', { name: 'Account' }).first().click();
 		await page.getByRole('button', { name: /sign out/i }).click();
 		await page
 			.getByRole('dialog')
 			.getByRole('button', { name: /sign out/i })
 			.click();
 
-		await expect(page.getByRole('button', { name: /local only.*sign in/i })).toBeVisible();
+		await page.getByRole('button', { name: 'Account' }).first().click();
+		await expect(page.getByRole('button', { name: /Sign in with GitHub/i })).toBeVisible();
 		await expect(page.locator('article', { hasText: 'Will be cleared' })).toHaveCount(0);
 	});
 });

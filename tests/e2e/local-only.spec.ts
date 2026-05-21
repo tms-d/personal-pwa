@@ -52,6 +52,9 @@ test.describe('Local-only task flows', () => {
 		await dialog.getByRole('button', { name: 'Save' }).click();
 
 		await expect(page.locator('article', { hasText: 'Will be archived' })).toHaveCount(0);
+
+		// "Show archived" lives on the All page, not Focus.
+		await page.getByRole('link', { name: 'All' }).first().click();
 		await page.getByLabel(/Show archived/).check();
 		await expect(page.locator('article', { hasText: 'Will be archived' })).toBeVisible();
 	});
