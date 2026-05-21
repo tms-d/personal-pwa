@@ -1,6 +1,5 @@
 <script lang="ts">
 	import TaskCard from '$lib/components/TaskCard.svelte';
-	import TaskForm from '$lib/components/TaskForm.svelte';
 	import { taskStore } from '$lib/store.svelte';
 
 	let showArchived = $state(false);
@@ -19,8 +18,6 @@
 </script>
 
 <div class="flex flex-col gap-5">
-	<TaskForm />
-
 	<section class="flex flex-col gap-3">
 		<div class="flex items-center justify-between px-1">
 			<h2
