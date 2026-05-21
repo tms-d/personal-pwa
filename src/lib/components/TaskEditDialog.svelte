@@ -27,6 +27,8 @@
 		initial.recurrence?.dueOn !== undefined ? String(initial.recurrence.dueOn) : ''
 	);
 	let targetIntervalDays = $state(initial.cadence?.targetIntervalDays ?? 7);
+	let contactedTargetDays = $state(initial.contactedTargetDays ?? 14);
+	let seenTargetDays = $state(initial.seenTargetDays ?? 60);
 	let archived = $state(!!initial.archivedAt);
 	let saving = $state(false);
 
@@ -48,7 +50,9 @@
 					? (task.archivedAt ?? new Date().toISOString())
 					: undefined,
 				recurrence: undefined,
-				cadence: undefined
+				cadence: undefined,
+				contactedTargetDays: undefined,
+				seenTargetDays: undefined
 			};
 			if (kind === 'recurring') {
 				patch.recurrence = {
@@ -57,6 +61,9 @@
 				};
 			} else if (kind === 'cadence') {
 				patch.cadence = { targetIntervalDays };
+			} else if (kind === 'friend') {
+				patch.contactedTargetDays = contactedTargetDays;
+				patch.seenTargetDays = seenTargetDays;
 			}
 			await updateTask(task.id, patch);
 			await reloadTasks();
@@ -81,7 +88,7 @@
 		<h2 class="text-base font-medium">Edit task</h2>
 
 		<div class="bg-sunken/60 inline-flex gap-1 self-start rounded-full p-1">
-			{#each ['todo', 'recurring', 'cadence'] as const as k (k)}
+			{#each ['todo', 'recurring', 'cadence', 'friend'] as const as k (k)}
 				<button
 					type="button"
 					onclick={() => (kind = k)}
@@ -142,6 +149,19 @@
 					class={inputClass}
 				/>
 			</label>
+		{/if}
+
+		{#if kind === 'friend'}
+			<div class="grid grid-cols-2 gap-3">
+				<label class="flex flex-col gap-1.5">
+					<span class={labelClass}>Contacted (days)</span>
+					<input type="number" min="1" bind:value={contactedTargetDays} class={inputClass} required />
+				</label>
+				<label class="flex flex-col gap-1.5">
+					<span class={labelClass}>Seen (days)</span>
+					<input type="number" min="1" bind:value={seenTargetDays} class={inputClass} required />
+				</label>
+			</div>
 		{/if}
 
 		<label class="flex items-center gap-2 pt-1">

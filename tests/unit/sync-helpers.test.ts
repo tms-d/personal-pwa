@@ -84,6 +84,8 @@ describe('taskToRow / rowToTask roundtrip', () => {
 			recurrence_every: null,
 			recurrence_due_on: null,
 			cadence_target_interval_days: null,
+			contacted_target_days: null,
+			seen_target_days: null,
 			created_at: '2026-05-01T00:00:00.000Z',
 			archived_at: null,
 			updated_at: '2026-05-01T00:00:00.000Z',
@@ -114,12 +116,28 @@ describe('taskToRow / rowToTask roundtrip', () => {
 });
 
 describe('categoryToRow / rowToCategory roundtrip', () => {
-	it('roundtrips a category', () => {
+	it('roundtrips a general category', () => {
 		const c: Category = {
 			id: 'cat-1',
 			name: 'House',
 			color: 'var(--color-sage)',
 			sortOrder: 0,
+			kind: 'general',
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		expect(rowToCategory(categoryToRow(c, USER_ID))).toEqual(c);
+	});
+
+	it('roundtrips a friends-kind category with defaults', () => {
+		const c: Category = {
+			id: 'cat-friends',
+			name: 'Close friends',
+			color: 'var(--color-blush)',
+			sortOrder: 2,
+			kind: 'friends',
+			defaultContactedDays: 14,
+			defaultSeenDays: 60,
 			createdAt: '2026-05-01T00:00:00.000Z',
 			updatedAt: '2026-05-01T00:00:00.000Z'
 		};
@@ -132,6 +150,7 @@ describe('categoryToRow / rowToCategory roundtrip', () => {
 			name: 'Old',
 			color: 'var(--color-blush)',
 			sortOrder: 3,
+			kind: 'general',
 			createdAt: '2026-05-01T00:00:00.000Z',
 			updatedAt: '2026-05-02T00:00:00.000Z',
 			deletedAt: '2026-05-02T00:00:00.000Z'
@@ -146,6 +165,9 @@ describe('categoryToRow / rowToCategory roundtrip', () => {
 			name: 'Gaming',
 			color: 'var(--color-sky)',
 			sort_order: 1,
+			kind: 'general',
+			default_contacted_days: null,
+			default_seen_days: null,
 			created_at: '2026-05-01T00:00:00.000Z',
 			updated_at: '2026-05-01T00:00:00.000Z',
 			deleted_at: null
@@ -153,15 +175,53 @@ describe('categoryToRow / rowToCategory roundtrip', () => {
 		const cat = rowToCategory(row);
 		expect(cat.deletedAt).toBeUndefined();
 	});
+
+	it('rows missing kind (pre-friends-migration data) default to general', () => {
+		const row = {
+			id: 'cat-legacy',
+			user_id: USER_ID,
+			name: 'Old',
+			color: 'var(--color-sage)',
+			sort_order: 0,
+			default_contacted_days: null,
+			default_seen_days: null,
+			created_at: '2026-05-01T00:00:00.000Z',
+			updated_at: '2026-05-01T00:00:00.000Z',
+			deleted_at: null
+		} as unknown as CategoryRow; // pre-migration shape
+		expect(rowToCategory(row).kind).toBe('general');
+	});
 });
 
 describe('completionToRow / rowToCompletion roundtrip', () => {
-	it('roundtrips a completion', () => {
+	it('roundtrips a single-stream completion', () => {
 		const c: Completion = {
 			id: 'c1',
 			taskId: 't1',
 			at: '2026-05-20T10:00:00.000Z',
 			updatedAt: '2026-05-20T10:00:00.000Z'
+		};
+		expect(rowToCompletion(completionToRow(c, USER_ID))).toEqual(c);
+	});
+
+	it('roundtrips a contacted-stream completion', () => {
+		const c: Completion = {
+			id: 'c-contacted',
+			taskId: 'friend-1',
+			at: '2026-05-20T10:00:00.000Z',
+			updatedAt: '2026-05-20T10:00:00.000Z',
+			stream: 'contacted'
+		};
+		expect(rowToCompletion(completionToRow(c, USER_ID))).toEqual(c);
+	});
+
+	it('roundtrips a seen-stream completion', () => {
+		const c: Completion = {
+			id: 'c-seen',
+			taskId: 'friend-1',
+			at: '2026-05-20T10:00:00.000Z',
+			updatedAt: '2026-05-20T10:00:00.000Z',
+			stream: 'seen'
 		};
 		expect(rowToCompletion(completionToRow(c, USER_ID))).toEqual(c);
 	});
@@ -231,6 +291,7 @@ describe('row shapes', () => {
 				'archived_at',
 				'cadence_target_interval_days',
 				'category_id',
+				'contacted_target_days',
 				'created_at',
 				'deleted_at',
 				'id',
@@ -239,6 +300,7 @@ describe('row shapes', () => {
 				'recurrence_due_on',
 				'recurrence_every',
 				'recurrence_period',
+				'seen_target_days',
 				'tags',
 				'title',
 				'updated_at',
@@ -253,6 +315,7 @@ describe('row shapes', () => {
 			name: 'X',
 			color: 'var(--color-sage)',
 			sortOrder: 0,
+			kind: 'general',
 			createdAt: '2026-05-01T00:00:00.000Z',
 			updatedAt: '2026-05-01T00:00:00.000Z'
 		};
@@ -261,8 +324,11 @@ describe('row shapes', () => {
 			[
 				'color',
 				'created_at',
+				'default_contacted_days',
+				'default_seen_days',
 				'deleted_at',
 				'id',
+				'kind',
 				'name',
 				'sort_order',
 				'updated_at',
@@ -280,7 +346,7 @@ describe('row shapes', () => {
 		};
 		const row: CompletionRow = completionToRow(c, USER_ID);
 		expect(Object.keys(row).sort()).toEqual(
-			['at', 'deleted_at', 'id', 'task_id', 'updated_at', 'user_id'].sort()
+			['at', 'deleted_at', 'id', 'stream', 'task_id', 'updated_at', 'user_id'].sort()
 		);
 	});
 });

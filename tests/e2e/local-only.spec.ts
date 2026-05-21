@@ -97,4 +97,41 @@ test.describe('Local-only task flows', () => {
 		await expect(page.getByRole('heading', { name: 'House' })).toBeVisible();
 		await expect(page.locator('article', { hasText: 'Vacuum' })).toBeVisible();
 	});
+
+	test('friends category and friend task with paired streams', async ({ page }) => {
+		// Create a friends-kind category with custom defaults.
+		await page.goto('/settings');
+		await page.getByRole('button', { name: 'friends', exact: true }).click();
+		await page.getByLabel('Name').fill('Close friends');
+		await page.getByLabel('Default contacted (days)').fill('7');
+		await page.getByLabel('Default seen (days)').fill('30');
+		await page.getByRole('button', { name: 'Add category' }).click();
+		await expect(page.locator('article', { hasText: 'Close friends' })).toBeVisible();
+
+		// Create a friend in that category — defaults should prefill.
+		await page.goto('/');
+		await page.getByRole('button', { name: 'New task' }).first().click();
+		const dialog = page.getByRole('dialog').filter({ hasText: 'New task' });
+		await dialog.getByRole('button', { name: 'friend', exact: true }).click();
+		await dialog.getByLabel('Name').fill('Alex');
+		await dialog.getByLabel('Category').selectOption({ label: 'Close friends' });
+		// Prefilled from category defaults.
+		await expect(dialog.getByLabel('Contacted (days)')).toHaveValue('7');
+		await expect(dialog.getByLabel('Seen (days)')).toHaveValue('30');
+		await dialog.getByRole('button', { name: 'Add friend' }).click();
+
+		// Friend card shows both streams.
+		const card = page.locator('article', { hasText: 'Alex' });
+		await expect(card).toBeVisible();
+		// "Contacted" / "Seen" appear as both stream labels (span) and buttons —
+		// disambiguate by locating the span specifically.
+		await expect(card.locator('span', { hasText: /^Contacted$/ })).toBeVisible();
+		await expect(card.locator('span', { hasText: /^Seen$/ })).toBeVisible();
+
+		// Logging contacted creates a per-stream completion; the contacted row
+		// flips out of overdue, the seen row stays.
+		await card.getByRole('button', { name: 'Contacted', exact: true }).click();
+		await expect(card.getByRole('button', { name: 'Undo contacted' })).toBeVisible();
+		await expect(card.getByRole('button', { name: 'Undo seen' })).toHaveCount(0);
+	});
 });
