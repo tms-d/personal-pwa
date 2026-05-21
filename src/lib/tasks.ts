@@ -1,4 +1,4 @@
-import type { Task, TaskWithLast, Period } from './types';
+import type { Task, TaskWithLast, Period, CompletionStream } from './types';
 import { db, uid } from './db';
 import { enqueuePush } from './sync.svelte';
 
@@ -50,12 +50,47 @@ export function daysSince(iso: string | null, now = new Date()): number | null {
 	return Math.floor((now.getTime() - then) / MS_PER_DAY);
 }
 
+export type Urgency = 'fresh' | 'soon' | 'due' | 'overdue';
+
 export interface ComputedStatus {
 	visible: boolean;
 	overdueDays: number;
-	urgency: 'fresh' | 'soon' | 'due' | 'overdue';
+	urgency: Urgency;
+	label: string;
+	// Set only for kind: 'friend' — one row of status per stream so the
+	// card can render both side by side. The outer `urgency` is the worst
+	// of the two streams.
+	streams?: { contacted: ComputedStreamStatus; seen: ComputedStreamStatus };
+}
+
+export interface ComputedStreamStatus {
+	overdueDays: number;
+	urgency: Urgency;
 	label: string;
 }
+
+function cadenceStatus(
+	targetDays: number,
+	lastAt: string | null | undefined,
+	now: Date
+): ComputedStreamStatus {
+	const since = daysSince(lastAt ?? null, now);
+	if (since === null) {
+		return { overdueDays: targetDays, urgency: 'overdue', label: 'never' };
+	}
+	const overdueDays = since - targetDays;
+	const urgency: Urgency =
+		overdueDays > 0
+			? 'overdue'
+			: since >= targetDays * 0.8
+				? 'due'
+				: since >= targetDays * 0.5
+					? 'soon'
+					: 'fresh';
+	return { overdueDays, urgency, label: `${since}d ago · target ${targetDays}d` };
+}
+
+const URGENCY_RANK: Record<Urgency, number> = { fresh: 0, soon: 1, due: 2, overdue: 3 };
 
 export function computeStatus(task: TaskWithLast, now = new Date()): ComputedStatus {
 	if (task.archivedAt) {
@@ -98,25 +133,28 @@ export function computeStatus(task: TaskWithLast, now = new Date()): ComputedSta
 	}
 
 	if (task.kind === 'cadence' && task.cadence) {
-		const target = task.cadence.targetIntervalDays;
-		const since = daysSince(task.lastCompletedAt, now);
-		if (since === null) {
-			return { visible: true, overdueDays: target, urgency: 'overdue', label: 'never done' };
-		}
-		const overdueDays = since - target;
-		const urgency: ComputedStatus['urgency'] =
-			overdueDays > 0
-				? 'overdue'
-				: since >= target * 0.8
-					? 'due'
-					: since >= target * 0.5
-						? 'soon'
-						: 'fresh';
+		const s = cadenceStatus(task.cadence.targetIntervalDays, task.lastCompletedAt, now);
+		// Translate `never` → `never done` for parity with the prior wording.
+		const label = s.label === 'never' ? 'never done' : s.label;
+		return { visible: true, overdueDays: s.overdueDays, urgency: s.urgency, label };
+	}
+
+	if (task.kind === 'friend') {
+		const contactedTarget = task.contactedTargetDays ?? 30;
+		const seenTarget = task.seenTargetDays ?? 90;
+		const contacted = cadenceStatus(contactedTarget, task.lastContactedAt, now);
+		const seen = cadenceStatus(seenTarget, task.lastSeenAt, now);
+		const urgency: Urgency =
+			URGENCY_RANK[contacted.urgency] >= URGENCY_RANK[seen.urgency]
+				? contacted.urgency
+				: seen.urgency;
+		const overdueDays = Math.max(contacted.overdueDays, seen.overdueDays);
 		return {
 			visible: true,
 			overdueDays,
 			urgency,
-			label: `${since}d ago · target ${target}d`
+			label: '',
+			streams: { contacted, seen }
 		};
 	}
 
@@ -126,15 +164,38 @@ export function computeStatus(task: TaskWithLast, now = new Date()): ComputedSta
 export async function loadTasksWithLast(): Promise<TaskWithLast[]> {
 	const tasks = await db.tasks.toArray();
 	const completions = await db.completions.toArray();
+	// For non-friend tasks we track the latest completion regardless of stream
+	// (and existing completions have no stream). For friend tasks we track
+	// the latest per (contacted|seen) stream.
 	const lastByTask = new Map<string, string>();
+	const lastContactedByTask = new Map<string, string>();
+	const lastSeenByTask = new Map<string, string>();
 	for (const c of completions) {
 		if (c.deletedAt) continue;
-		const cur = lastByTask.get(c.taskId);
-		if (!cur || c.at > cur) lastByTask.set(c.taskId, c.at);
+		if (c.stream === 'contacted') {
+			const cur = lastContactedByTask.get(c.taskId);
+			if (!cur || c.at > cur) lastContactedByTask.set(c.taskId, c.at);
+		} else if (c.stream === 'seen') {
+			const cur = lastSeenByTask.get(c.taskId);
+			if (!cur || c.at > cur) lastSeenByTask.set(c.taskId, c.at);
+		} else {
+			const cur = lastByTask.get(c.taskId);
+			if (!cur || c.at > cur) lastByTask.set(c.taskId, c.at);
+		}
 	}
 	return tasks
 		.filter((t) => !t.deletedAt)
-		.map((t) => ({ ...t, lastCompletedAt: lastByTask.get(t.id) ?? null }));
+		.map((t) => {
+			if (t.kind === 'friend') {
+				return {
+					...t,
+					lastCompletedAt: null,
+					lastContactedAt: lastContactedByTask.get(t.id) ?? null,
+					lastSeenAt: lastSeenByTask.get(t.id) ?? null
+				};
+			}
+			return { ...t, lastCompletedAt: lastByTask.get(t.id) ?? null };
+		});
 }
 
 export async function createTask(
@@ -170,23 +231,31 @@ export async function updateTask(
 	return updated;
 }
 
-export async function completeTask(taskId: string, at = new Date()): Promise<void> {
+export async function completeTask(
+	taskId: string,
+	at: Date = new Date(),
+	stream?: CompletionStream
+): Promise<void> {
 	const now = new Date().toISOString();
 	const completion = {
 		id: uid(),
 		taskId,
 		at: at.toISOString(),
-		updatedAt: now
+		updatedAt: now,
+		...(stream ? { stream } : {})
 	};
 	await db.completions.add(completion);
 	void enqueuePush('completions', completion.id);
 }
 
-export async function uncompleteTask(taskId: string): Promise<void> {
+export async function uncompleteTask(
+	taskId: string,
+	stream?: CompletionStream
+): Promise<void> {
 	const completions = await db.completions
 		.where('taskId')
 		.equals(taskId)
-		.filter((c) => !c.deletedAt)
+		.filter((c) => !c.deletedAt && (stream === undefined || c.stream === stream))
 		.toArray();
 	if (completions.length === 0) return;
 	completions.sort((a, b) => (a.at < b.at ? 1 : -1));

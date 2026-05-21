@@ -1,9 +1,13 @@
 <script lang="ts">
 	import type { TaskKind, Period, Task } from '$lib/types';
 	import { createTask } from '$lib/tasks';
-	import { reloadTasks } from '$lib/store.svelte';
+	import { reloadTasks, categoryStore } from '$lib/store.svelte';
 	import { Button } from '$lib/ui';
 	import CategoryPicker from './CategoryPicker.svelte';
+	import {
+		DEFAULT_FRIEND_CONTACTED_DAYS,
+		DEFAULT_FRIEND_SEEN_DAYS
+	} from '$lib/categories';
 
 	interface Props {
 		onCreated?: () => void;
@@ -18,7 +22,28 @@
 	let period: Period = $state('week');
 	let dueOn: string = $state('');
 	let targetIntervalDays: number = $state(7);
+	let contactedTargetDays: number = $state(DEFAULT_FRIEND_CONTACTED_DAYS);
+	let seenTargetDays: number = $state(DEFAULT_FRIEND_SEEN_DAYS);
+	let userTouchedContacted = $state(false);
+	let userTouchedSeen = $state(false);
 	let submitting = $state(false);
+
+	// When the user picks a friends-kind category, prefill the target-days
+	// inputs from the category's defaults — but only if the user hasn't
+	// already typed a value (don't clobber a deliberate override).
+	$effect(() => {
+		const cat = categoryId
+			? categoryStore.items.find((c) => c.id === categoryId)
+			: undefined;
+		if (cat?.kind === 'friends') {
+			if (!userTouchedContacted && cat.defaultContactedDays !== undefined) {
+				contactedTargetDays = cat.defaultContactedDays;
+			}
+			if (!userTouchedSeen && cat.defaultSeenDays !== undefined) {
+				seenTargetDays = cat.defaultSeenDays;
+			}
+		}
+	});
 
 	async function submit(e: Event) {
 		e.preventDefault();
@@ -38,10 +63,15 @@
 				};
 			} else if (kind === 'cadence') {
 				base.cadence = { targetIntervalDays };
+			} else if (kind === 'friend') {
+				base.contactedTargetDays = contactedTargetDays;
+				base.seenTargetDays = seenTargetDays;
 			}
 			await createTask(base);
 			title = '';
 			notes = '';
+			userTouchedContacted = false;
+			userTouchedSeen = false;
 			await reloadTasks();
 			onCreated?.();
 		} finally {
@@ -57,7 +87,7 @@
 
 <form onsubmit={submit} class="flex flex-col gap-4">
 	<div class="bg-sunken/60 inline-flex gap-1 self-start rounded-full p-1">
-		{#each ['todo', 'recurring', 'cadence'] as const as k (k)}
+		{#each ['todo', 'recurring', 'cadence', 'friend'] as const as k (k)}
 			<button
 				type="button"
 				onclick={() => (kind = k)}
@@ -74,11 +104,11 @@
 	</div>
 
 	<label class="flex flex-col gap-1.5">
-		<span class={labelClass}>Title</span>
+		<span class={labelClass}>{kind === 'friend' ? 'Name' : 'Title'}</span>
 		<input
 			type="text"
 			bind:value={title}
-			placeholder="What needs doing?"
+			placeholder={kind === 'friend' ? "Friend's name" : 'What needs doing?'}
 			required
 			class={inputClass}
 		/>
@@ -126,6 +156,34 @@
 		</label>
 	{/if}
 
-	<Button type="submit" disabled={submitting} fullWidth>Add task</Button>
-</form>
+	{#if kind === 'friend'}
+		<div class="grid grid-cols-2 gap-3">
+			<label class="flex flex-col gap-1.5">
+				<span class={labelClass}>Contacted (days)</span>
+				<input
+					type="number"
+					min="1"
+					bind:value={contactedTargetDays}
+					oninput={() => (userTouchedContacted = true)}
+					class={inputClass}
+					required
+				/>
+			</label>
+			<label class="flex flex-col gap-1.5">
+				<span class={labelClass}>Seen (days)</span>
+				<input
+					type="number"
+					min="1"
+					bind:value={seenTargetDays}
+					oninput={() => (userTouchedSeen = true)}
+					class={inputClass}
+					required
+				/>
+			</label>
+		</div>
+	{/if}
 
+	<Button type="submit" disabled={submitting} fullWidth>
+		{kind === 'friend' ? 'Add friend' : 'Add task'}
+	</Button>
+</form>

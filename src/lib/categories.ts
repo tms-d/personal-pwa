@@ -12,6 +12,12 @@ export const CATEGORY_COLORS = [
 
 export const DEFAULT_CATEGORY_COLOR = CATEGORY_COLORS[0].value;
 
+// Starter values prefilled in the Settings form when creating a friends-kind
+// category. The user can change them before saving; the saved values then
+// flow into each new friend created in this category.
+export const DEFAULT_FRIEND_CONTACTED_DAYS = 14;
+export const DEFAULT_FRIEND_SEEN_DAYS = 60;
+
 export async function listCategories(): Promise<Category[]> {
 	const all = await db.categories.toArray();
 	return all.filter((c) => !c.deletedAt).sort((a, b) => a.sortOrder - b.sortOrder);

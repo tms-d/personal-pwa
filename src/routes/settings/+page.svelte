@@ -6,17 +6,26 @@
 		deleteCategory,
 		reorderCategory,
 		CATEGORY_COLORS,
-		DEFAULT_CATEGORY_COLOR
+		DEFAULT_CATEGORY_COLOR,
+		DEFAULT_FRIEND_CONTACTED_DAYS,
+		DEFAULT_FRIEND_SEEN_DAYS
 	} from '$lib/categories';
+	import type { CategoryKind } from '$lib/types';
 	import { Button, Card } from '$lib/ui';
 
 	let newName = $state('');
 	let newColor: string = $state(DEFAULT_CATEGORY_COLOR);
+	let newKind: CategoryKind = $state('general');
+	let newContacted: number = $state(DEFAULT_FRIEND_CONTACTED_DAYS);
+	let newSeen: number = $state(DEFAULT_FRIEND_SEEN_DAYS);
 	let creating = $state(false);
 
 	let editingId: string | null = $state(null);
 	let editName = $state('');
 	let editColor: string = $state(DEFAULT_CATEGORY_COLOR);
+	let editContacted: number = $state(DEFAULT_FRIEND_CONTACTED_DAYS);
+	let editSeen: number = $state(DEFAULT_FRIEND_SEEN_DAYS);
+	let editingKind: CategoryKind = $state('general');
 
 	async function create(e: Event) {
 		e.preventDefault();
@@ -24,19 +33,39 @@
 		if (!name) return;
 		creating = true;
 		try {
-			await createCategory({ name, color: newColor });
+			await createCategory({
+				name,
+				color: newColor,
+				kind: newKind,
+				...(newKind === 'friends'
+					? { defaultContactedDays: newContacted, defaultSeenDays: newSeen }
+					: {})
+			});
 			newName = '';
 			newColor = DEFAULT_CATEGORY_COLOR;
+			newKind = 'general';
+			newContacted = DEFAULT_FRIEND_CONTACTED_DAYS;
+			newSeen = DEFAULT_FRIEND_SEEN_DAYS;
 			await reloadCategories();
 		} finally {
 			creating = false;
 		}
 	}
 
-	function startEdit(id: string, name: string, color: string) {
+	function startEdit(
+		id: string,
+		name: string,
+		color: string,
+		kind: CategoryKind,
+		contacted?: number,
+		seen?: number
+	) {
 		editingId = id;
 		editName = name;
 		editColor = color;
+		editingKind = kind;
+		editContacted = contacted ?? DEFAULT_FRIEND_CONTACTED_DAYS;
+		editSeen = seen ?? DEFAULT_FRIEND_SEEN_DAYS;
 	}
 
 	function cancelEdit() {
@@ -47,7 +76,13 @@
 		if (!editingId) return;
 		const name = editName.trim();
 		if (!name) return;
-		await updateCategory(editingId, { name, color: editColor });
+		await updateCategory(editingId, {
+			name,
+			color: editColor,
+			...(editingKind === 'friends'
+				? { defaultContactedDays: editContacted, defaultSeenDays: editSeen }
+				: {})
+		});
 		editingId = null;
 		await reloadCategories();
 	}
@@ -68,6 +103,28 @@
 	const labelClass = 'text-ink-secondary text-xs font-medium';
 </script>
 
+{#snippet kindToggle(value: CategoryKind, set: (v: CategoryKind) => void, disabled: boolean = false)}
+	<div class="bg-sunken/60 inline-flex gap-1 self-start rounded-full p-1">
+		{#each ['general', 'friends'] as const as k (k)}
+			<button
+				type="button"
+				onclick={() => set(k)}
+				disabled={disabled && value !== k}
+				class="rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors"
+				class:bg-elevated={value === k}
+				class:text-ink={value === k}
+				class:shadow-paper={value === k}
+				class:text-ink-tertiary={value !== k}
+				class:hover:text-ink={value !== k && !disabled}
+				class:opacity-50={disabled && value !== k}
+				class:cursor-not-allowed={disabled && value !== k}
+			>
+				{k}
+			</button>
+		{/each}
+	</div>
+{/snippet}
+
 <div class="flex flex-col gap-5">
 	<section class="flex flex-col gap-3">
 		<h2
@@ -78,12 +135,17 @@
 
 		<Card padding="md">
 			<form onsubmit={create} class="flex flex-col gap-3">
+				<div class="flex flex-col gap-1.5">
+					<span class={labelClass}>Type</span>
+					{@render kindToggle(newKind, (v) => (newKind = v))}
+				</div>
+
 				<label class="flex flex-col gap-1.5">
 					<span class={labelClass}>Name</span>
 					<input
 						type="text"
 						bind:value={newName}
-						placeholder="e.g. House, Gaming, Hobby"
+						placeholder={newKind === 'friends' ? 'e.g. Close friends, Family' : 'e.g. House, Gaming, Hobby'}
 						class={inputClass}
 						required
 					/>
@@ -110,6 +172,31 @@
 					</div>
 				</div>
 
+				{#if newKind === 'friends'}
+					<div class="grid grid-cols-2 gap-3">
+						<label class="flex flex-col gap-1.5">
+							<span class={labelClass}>Default contacted (days)</span>
+							<input
+								type="number"
+								min="1"
+								bind:value={newContacted}
+								class={inputClass}
+								required
+							/>
+						</label>
+						<label class="flex flex-col gap-1.5">
+							<span class={labelClass}>Default seen (days)</span>
+							<input
+								type="number"
+								min="1"
+								bind:value={newSeen}
+								class={inputClass}
+								required
+							/>
+						</label>
+					</div>
+				{/if}
+
 				<Button type="submit" disabled={creating} fullWidth>Add category</Button>
 			</form>
 		</Card>
@@ -122,6 +209,10 @@
 					<Card padding="sm">
 						{#if editingId === cat.id}
 							<div class="flex flex-col gap-2.5">
+								<!-- Kind locked while editing: existing friend tasks reference
+								     this category's shape; flipping to/from friends mid-life is
+								     surprising. Create a new category if a different kind is needed. -->
+								{@render kindToggle(editingKind, () => {}, true)}
 								<input
 									type="text"
 									bind:value={editName}
@@ -144,6 +235,18 @@
 										></button>
 									{/each}
 								</div>
+								{#if editingKind === 'friends'}
+									<div class="grid grid-cols-2 gap-3">
+										<label class="flex flex-col gap-1.5">
+											<span class={labelClass}>Default contacted (days)</span>
+											<input type="number" min="1" bind:value={editContacted} class={inputClass} required />
+										</label>
+										<label class="flex flex-col gap-1.5">
+											<span class={labelClass}>Default seen (days)</span>
+											<input type="number" min="1" bind:value={editSeen} class={inputClass} required />
+										</label>
+									</div>
+								{/if}
 								<div class="flex gap-2">
 									<Button variant="secondary" size="sm" onclick={cancelEdit}>Cancel</Button>
 									<Button size="sm" onclick={saveEdit}>Save</Button>
@@ -158,6 +261,11 @@
 								></span>
 								<span class="text-ink flex-1 truncate text-sm font-medium">
 									{cat.name}
+									{#if cat.kind === 'friends'}
+										<span class="text-ink-tertiary ml-1.5 text-[11px] font-normal">
+											· friends · {cat.defaultContactedDays}d / {cat.defaultSeenDays}d
+										</span>
+									{/if}
 								</span>
 								<div class="flex items-center gap-1">
 									<button
@@ -185,7 +293,7 @@
 									<Button
 										variant="ghost"
 										size="sm"
-										onclick={() => startEdit(cat.id, cat.name, cat.color)}
+										onclick={() => startEdit(cat.id, cat.name, cat.color, cat.kind, cat.defaultContactedDays, cat.defaultSeenDays)}
 									>
 										Edit
 									</Button>

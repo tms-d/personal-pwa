@@ -17,6 +17,8 @@ export interface TaskRow {
 	recurrence_every: number | null;
 	recurrence_due_on: string | null;
 	cadence_target_interval_days: number | null;
+	contacted_target_days: number | null;
+	seen_target_days: number | null;
 	created_at: string;
 	archived_at: string | null;
 	updated_at: string;
@@ -28,6 +30,7 @@ export interface CompletionRow {
 	user_id: string;
 	task_id: string;
 	at: string;
+	stream: string | null;
 	updated_at: string;
 	deleted_at: string | null;
 }
@@ -38,6 +41,9 @@ export interface CategoryRow {
 	name: string;
 	color: string;
 	sort_order: number;
+	kind: string;
+	default_contacted_days: number | null;
+	default_seen_days: number | null;
 	created_at: string;
 	updated_at: string;
 	deleted_at: string | null;
@@ -57,6 +63,8 @@ export function taskToRow(task: Task, userId: string): TaskRow {
 		recurrence_due_on:
 			task.recurrence?.dueOn !== undefined ? String(task.recurrence.dueOn) : null,
 		cadence_target_interval_days: task.cadence?.targetIntervalDays ?? null,
+		contacted_target_days: task.contactedTargetDays ?? null,
+		seen_target_days: task.seenTargetDays ?? null,
 		created_at: task.createdAt,
 		archived_at: task.archivedAt ?? null,
 		updated_at: task.updatedAt,
@@ -90,6 +98,12 @@ export function rowToTask(row: TaskRow): Task {
 	if (row.cadence_target_interval_days !== null) {
 		task.cadence = { targetIntervalDays: row.cadence_target_interval_days };
 	}
+	if (row.contacted_target_days !== null) {
+		task.contactedTargetDays = row.contacted_target_days;
+	}
+	if (row.seen_target_days !== null) {
+		task.seenTargetDays = row.seen_target_days;
+	}
 	return task;
 }
 
@@ -100,6 +114,9 @@ export function categoryToRow(category: Category, userId: string): CategoryRow {
 		name: category.name,
 		color: category.color,
 		sort_order: category.sortOrder,
+		kind: category.kind,
+		default_contacted_days: category.defaultContactedDays ?? null,
+		default_seen_days: category.defaultSeenDays ?? null,
 		created_at: category.createdAt,
 		updated_at: category.updatedAt,
 		deleted_at: category.deletedAt ?? null
@@ -107,15 +124,25 @@ export function categoryToRow(category: Category, userId: string): CategoryRow {
 }
 
 export function rowToCategory(row: CategoryRow): Category {
-	return {
+	const cat: Category = {
 		id: row.id,
 		name: row.name,
 		color: row.color,
 		sortOrder: row.sort_order,
+		// Rows from before the friends migration won't have `kind` set; treat
+		// those as 'general' so existing data keeps loading cleanly.
+		kind: (row.kind as Category['kind']) ?? 'general',
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 		deletedAt: row.deleted_at ?? undefined
 	};
+	if (row.default_contacted_days !== null) {
+		cat.defaultContactedDays = row.default_contacted_days;
+	}
+	if (row.default_seen_days !== null) {
+		cat.defaultSeenDays = row.default_seen_days;
+	}
+	return cat;
 }
 
 export function completionToRow(c: Completion, userId: string): CompletionRow {
@@ -124,19 +151,24 @@ export function completionToRow(c: Completion, userId: string): CompletionRow {
 		user_id: userId,
 		task_id: c.taskId,
 		at: c.at,
+		stream: c.stream ?? null,
 		updated_at: c.updatedAt,
 		deleted_at: c.deletedAt ?? null
 	};
 }
 
 export function rowToCompletion(row: CompletionRow): Completion {
-	return {
+	const c: Completion = {
 		id: row.id,
 		taskId: row.task_id,
 		at: row.at,
 		updatedAt: row.updated_at,
 		deletedAt: row.deleted_at ?? undefined
 	};
+	if (row.stream === 'contacted' || row.stream === 'seen') {
+		c.stream = row.stream;
+	}
+	return c;
 }
 
 // LWW merge predicate. `strict` controls > vs >=:

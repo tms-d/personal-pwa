@@ -1,4 +1,8 @@
-export type TaskKind = 'todo' | 'recurring' | 'cadence';
+export type TaskKind = 'todo' | 'recurring' | 'cadence' | 'friend';
+
+export type CategoryKind = 'general' | 'friends';
+
+export type CompletionStream = 'contacted' | 'seen';
 
 export type Period = 'day' | 'week' | 'month' | 'year';
 
@@ -25,6 +29,10 @@ export interface Task {
 	deletedAt?: string;
 	recurrence?: Recurrence;
 	cadence?: Cadence;
+	// Friend tasks only. Copied from the category's defaults on create,
+	// stored per-task so each friend can be tuned independently.
+	contactedTargetDays?: number;
+	seenTargetDays?: number;
 }
 
 export interface Category {
@@ -32,6 +40,11 @@ export interface Category {
 	name: string;
 	color: string;
 	sortOrder: number;
+	kind: CategoryKind;
+	// Defaults for friend tasks created in this category. Only meaningful
+	// when kind === 'friends'; ignored otherwise.
+	defaultContactedDays?: number;
+	defaultSeenDays?: number;
 	createdAt: string;
 	updatedAt: string;
 	deletedAt?: string;
@@ -43,6 +56,14 @@ export interface Completion {
 	at: string;
 	updatedAt: string;
 	deletedAt?: string;
+	// null/undefined = single-stream (todo / cadence / recurring).
+	// Set to 'contacted' or 'seen' for friend tasks.
+	stream?: CompletionStream;
 }
 
-export type TaskWithLast = Task & { lastCompletedAt: string | null };
+export type TaskWithLast = Task & {
+	lastCompletedAt: string | null;
+	// Populated only for kind: 'friend'. lastCompletedAt is null for friends.
+	lastContactedAt?: string | null;
+	lastSeenAt?: string | null;
+};
