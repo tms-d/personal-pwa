@@ -1,5 +1,6 @@
 <script lang="ts">
 	import TaskCard from '$lib/components/TaskCard.svelte';
+	import FriendTile from '$lib/components/FriendTile.svelte';
 	import { Card } from '$lib/ui';
 	import { taskStore, categoryStore } from '$lib/store.svelte';
 	import { computeStatus } from '$lib/tasks';
@@ -7,10 +8,19 @@
 
 	const urgencyOrder = { overdue: 0, due: 1, soon: 2, fresh: 3 } as const;
 
+	// Friends only surface on Focus when at least one stream is breached
+	// (urgency > fresh). Calm friends live on the All tab.
+	function shouldShowOnFocus(t: TaskWithLast): boolean {
+		const s = computeStatus(t);
+		if (!s.visible) return false;
+		if (t.kind === 'friend') return s.urgency !== 'fresh';
+		return true;
+	}
+
 	const visible = $derived(
 		taskStore.items
+			.filter(shouldShowOnFocus)
 			.map((t) => ({ task: t, status: computeStatus(t) }))
-			.filter((x) => x.status.visible)
 			.sort((a, b) => urgencyOrder[a.status.urgency] - urgencyOrder[b.status.urgency])
 	);
 
@@ -23,9 +33,6 @@
 		const live = new Set(categoryStore.items.map((c) => c.id));
 		const byCategory = new Map<string | null, TaskWithLast[]>();
 		for (const { task } of visible) {
-			// A dangling categoryId (category soft-deleted on another device but
-			// the task hasn't received its categoryId clear yet) falls back to
-			// Uncategorized so the task stays visible.
 			const key = task.categoryId && live.has(task.categoryId) ? task.categoryId : null;
 			const list = byCategory.get(key) ?? [];
 			list.push(task);
@@ -44,6 +51,13 @@
 	});
 
 	const hasAnyCategories = $derived(categoryStore.items.length > 0);
+
+	function partitionByKind(tasks: TaskWithLast[]) {
+		const friends: TaskWithLast[] = [];
+		const others: TaskWithLast[] = [];
+		for (const t of tasks) (t.kind === 'friend' ? friends : others).push(t);
+		return { friends, others };
+	}
 </script>
 
 <div class="flex flex-col gap-5">
@@ -59,13 +73,24 @@
 			</div>
 		</Card>
 	{:else if !hasAnyCategories}
-		<div class="flex flex-col gap-3">
-			{#each visible as { task } (task.id)}
-				<TaskCard {task} />
-			{/each}
-		</div>
+		{@const { friends, others } = partitionByKind(visible.map((v) => v.task))}
+		{#if others.length > 0}
+			<div class="flex flex-col gap-3">
+				{#each others as task (task.id)}
+					<TaskCard {task} />
+				{/each}
+			</div>
+		{/if}
+		{#if friends.length > 0}
+			<div class="grid grid-cols-2 gap-2.5">
+				{#each friends as task (task.id)}
+					<FriendTile {task} showCategoryDot={false} />
+				{/each}
+			</div>
+		{/if}
 	{:else}
 		{#each groups as group (group.category?.id ?? '__uncategorized')}
+			{@const { friends, others } = partitionByKind(group.tasks)}
 			<section class="flex flex-col gap-3">
 				<div class="flex items-center gap-2 px-1">
 					{#if group.category}
@@ -87,9 +112,16 @@
 						</h2>
 					{/if}
 				</div>
-				{#each group.tasks as task (task.id)}
+				{#each others as task (task.id)}
 					<TaskCard {task} />
 				{/each}
+				{#if friends.length > 0}
+					<div class="grid grid-cols-2 gap-2.5">
+						{#each friends as task (task.id)}
+							<FriendTile {task} showCategoryDot={false} />
+						{/each}
+					</div>
+				{/if}
 			</section>
 		{/each}
 	{/if}
