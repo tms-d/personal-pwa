@@ -2,7 +2,7 @@
 
 A local-first PWA for tracking recurring todos, cadence ("when did I last…")
 items, and plain todos. Designed for a single user. Live at
-<https://pwa.tomas.today>.
+<https://snail.tomas.today>.
 
 For the *why* behind the architecture, see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
