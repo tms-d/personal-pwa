@@ -8,10 +8,9 @@
 
 	interface Props {
 		task: TaskWithLast;
-		showCategoryDot?: boolean;
 	}
 
-	let { task, showCategoryDot = true }: Props = $props();
+	let { task }: Props = $props();
 	let editing = $state(false);
 	let justStreamed = $state<CompletionStream | null>(null);
 
@@ -62,15 +61,15 @@
 	}
 </script>
 
-<article class="flex flex-col gap-3 rounded-2xl border p-3.5 shadow-paper {toneClass(status.urgency)}">
+<article class="relative flex flex-col gap-3 overflow-hidden rounded-2xl border pl-5 pr-3.5 py-3.5 shadow-paper {toneClass(status.urgency)}">
+	{#if category}
+		<span
+			class="absolute inset-y-0 left-0 w-[5px]"
+			style:background-color={category.color}
+			aria-hidden="true"
+		></span>
+	{/if}
 	<div class="flex items-center gap-2 min-w-0">
-		{#if showCategoryDot && category}
-			<span
-				class="h-2 w-2 rounded-full shrink-0"
-				style:background-color={category.color}
-				aria-hidden="true"
-			></span>
-		{/if}
 		<span class="text-ink truncate text-sm font-semibold leading-tight flex-1">{task.title}</span>
 		<button
 			type="button"
