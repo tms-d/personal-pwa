@@ -99,10 +99,13 @@ export function computeStatus(task: TaskWithLast, now = new Date()): ComputedSta
 
 	if (task.kind === 'todo') {
 		const done = !!task.lastCompletedAt;
+		// A plain todo isn't inherently urgent — it just exists until done.
+		// Leaving urgency at 'fresh' keeps the row in its neutral skin; the
+		// fact that it's on the Focus screen at all is signal enough.
 		return {
 			visible: !done,
 			overdueDays: 0,
-			urgency: done ? 'fresh' : 'due',
+			urgency: 'fresh',
 			label: done ? 'Done' : 'Todo'
 		};
 	}
@@ -262,6 +265,31 @@ export async function uncompleteTask(
 	const target = completions[0];
 	const now = new Date().toISOString();
 	const updated = { ...target, deletedAt: now, updatedAt: now };
+	await db.completions.put(updated);
+	void enqueuePush('completions', updated.id);
+}
+
+// Set the most-recent completion's `at` to a chosen date — used by the
+// edit dialog's "Last completed / contacted / seen on" date pickers. If
+// no live completion exists yet, one is created at that date.
+export async function setLastCompletedAt(
+	taskId: string,
+	at: Date,
+	stream?: CompletionStream
+): Promise<void> {
+	const completions = await db.completions
+		.where('taskId')
+		.equals(taskId)
+		.filter((c) => !c.deletedAt && (stream === undefined || c.stream === stream))
+		.toArray();
+	const now = new Date().toISOString();
+	if (completions.length === 0) {
+		await completeTask(taskId, at, stream);
+		return;
+	}
+	completions.sort((a, b) => (a.at < b.at ? 1 : -1));
+	const target = completions[0];
+	const updated = { ...target, at: at.toISOString(), updatedAt: now };
 	await db.completions.put(updated);
 	void enqueuePush('completions', updated.id);
 }

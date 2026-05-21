@@ -3,33 +3,29 @@
 	import FriendTile from '$lib/components/FriendTile.svelte';
 	import { taskStore, categoryStore } from '$lib/store.svelte';
 	import { computeStatus } from '$lib/tasks';
-	import type { TaskWithLast } from '$lib/types';
 
-	let showArchived = $state(false);
 	let categoryFilter: string | 'all' | '__uncategorized' = $state('all');
 
 	const urgencyOrder = { overdue: 0, due: 1, soon: 2, fresh: 3 } as const;
 
 	const filtered = $derived(
 		taskStore.items.filter((t) => {
+			// Legacy archived rows stay hidden everywhere (archive UI is gone;
+			// the column lingers as dormant data — see issue for cleanup).
+			if (t.archivedAt) return false;
 			if (categoryFilter === 'all') return true;
 			if (categoryFilter === '__uncategorized') return !t.categoryId;
 			return t.categoryId === categoryFilter;
 		})
 	);
 
-	const active = $derived(filtered.filter((t) => !t.archivedAt));
-	const archived = $derived(
-		filtered
-			.filter((t) => t.archivedAt)
-			.sort((a, b) => (a.archivedAt! < b.archivedAt! ? 1 : -1))
-	);
-
 	const activeTasks = $derived(
-		active.filter((t) => t.kind !== 'friend').sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+		filtered
+			.filter((t) => t.kind !== 'friend')
+			.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
 	);
 	const activeFriends = $derived(
-		active
+		filtered
 			.filter((t) => t.kind === 'friend')
 			.sort((a, b) => {
 				// Most-overdue first, calm last — keeps the dim tiles at the bottom.
@@ -44,32 +40,9 @@
 		activeFriends.filter((t) => computeStatus(t).urgency !== 'fresh').length
 	);
 	const calmFriendCount = $derived(activeFriends.length - breachedFriendCount);
-
-	function archivedFriends(list: TaskWithLast[]): TaskWithLast[] {
-		return list.filter((t) => t.kind === 'friend');
-	}
-	function archivedNonFriends(list: TaskWithLast[]): TaskWithLast[] {
-		return list.filter((t) => t.kind !== 'friend');
-	}
 </script>
 
 <div class="flex flex-col gap-5">
-	<div class="flex items-center justify-between gap-3 px-1">
-		<h2 class="text-ink-tertiary text-[11px] font-medium uppercase tracking-[0.15em]">
-			All
-		</h2>
-		{#if archived.length > 0}
-			<label class="text-ink-tertiary flex items-center gap-1.5 text-xs">
-				<input
-					type="checkbox"
-					bind:checked={showArchived}
-					class="accent-accent h-3.5 w-3.5"
-				/>
-				Show archived ({archived.length})
-			</label>
-		{/if}
-	</div>
-
 	{#if categoryStore.items.length > 0}
 		<div class="flex flex-wrap gap-1.5 px-1">
 			<button
@@ -156,29 +129,5 @@
 				{/each}
 			</div>
 		</section>
-	{/if}
-
-	{#if showArchived && archived.length > 0}
-		{@const archivedNF = archivedNonFriends(archived)}
-		{@const archivedF = archivedFriends(archived)}
-		<h2
-			class="text-ink-tertiary mt-3 px-1 text-[11px] font-medium uppercase tracking-[0.15em]"
-		>
-			Archived
-		</h2>
-		{#if archivedNF.length > 0}
-			<div class="flex flex-col gap-3 opacity-60">
-				{#each archivedNF as task (task.id)}
-					<TaskCard {task} showCategory />
-				{/each}
-			</div>
-		{/if}
-		{#if archivedF.length > 0}
-			<div class="grid grid-cols-2 gap-2.5 opacity-60">
-				{#each archivedF as task (task.id)}
-					<FriendTile {task} />
-				{/each}
-			</div>
-		{/if}
 	{/if}
 </div>

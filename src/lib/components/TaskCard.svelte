@@ -1,25 +1,33 @@
 <script lang="ts">
 	import type { TaskWithLast } from '$lib/types';
 	import { computeStatus } from '$lib/tasks';
-	import { completeTask, uncompleteTask, deleteTask } from '$lib/tasks';
+	import { completeTask } from '$lib/tasks';
 	import { reloadTasks, categoryStore } from '$lib/store.svelte';
-	import { Button, Card } from '$lib/ui';
 	import TaskEditDialog from './TaskEditDialog.svelte';
 	import { scale } from 'svelte/transition';
 
 	interface Props {
 		task: TaskWithLast;
-		showActions?: boolean;
 		showCategory?: boolean;
 	}
 
-	let { task, showActions = true, showCategory = false }: Props = $props();
+	let { task, showCategory = false }: Props = $props();
 	let editing = $state(false);
 	let justSnailed = $state(false);
 
 	const status = $derived(computeStatus(task));
 	const category = $derived(
 		task.categoryId ? categoryStore.items.find((c) => c.id === task.categoryId) : undefined
+	);
+
+	const stripeClass = $derived(
+		status.urgency === 'overdue'
+			? 'bg-danger'
+			: status.urgency === 'due'
+				? 'bg-accent'
+				: status.urgency === 'soon'
+					? 'bg-warning'
+					: 'bg-transparent'
 	);
 
 	const statusLabelClass = $derived(
@@ -32,135 +40,97 @@
 					: 'text-ink-tertiary'
 	);
 
-	async function markDone() {
+	async function check() {
+		if (justSnailed) return;
 		justSnailed = true;
 		await completeTask(task.id);
 		setTimeout(() => {
 			void reloadTasks();
+			// `reloadTasks` will recompute the row; for todos it disappears, for
+			// recurring/cadence it stays. justSnailed resets on next mount.
 		}, 900);
-	}
-
-	async function undo() {
-		await uncompleteTask(task.id);
-		await reloadTasks();
-	}
-
-	async function remove() {
-		if (!confirm(`Delete "${task.title}"?`)) return;
-		await deleteTask(task.id);
-		await reloadTasks();
 	}
 </script>
 
-<Card tone={status.urgency === 'fresh' ? 'default' : status.urgency}>
-	<div class="flex flex-col gap-3">
-		<div class="flex items-start justify-between gap-3">
-			<div class="flex min-w-0 flex-1 items-start gap-2.5">
-				<span class="text-success mt-0.5 shrink-0" title={task.kind}>
-					{#if task.kind === 'todo'}
-						<svg
-							class="h-4 w-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M 12 20 V 12" />
-							<path d="M 12 12 C 6 11 4 7 7 4 C 10 5 12 8 12 12" />
-							<path d="M 12 12 C 18 11 20 7 17 4 C 14 5 12 8 12 12" />
-						</svg>
-					{:else if task.kind === 'recurring'}
-						<svg
-							class="h-4 w-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M 12 22 V 17" />
-							<path d="M 12 17 C 9 14 9 9 12 7 C 15 9 15 14 12 17" />
-							<path d="M 12 17 C 7 16 4 13 4 10 C 7 9 11 13 12 17" />
-							<path d="M 12 17 C 17 16 20 13 20 10 C 17 9 13 13 12 17" />
-						</svg>
-					{:else}
-						<svg
-							class="h-4 w-4"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="1.75"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							aria-hidden="true"
-						>
-							<path d="M 6 18 C 4 12 8 5 18 4 C 19 12 14 19 6 18 Z" />
-							<path d="M 6 18 L 18 4" />
-						</svg>
-					{/if}
-				</span>
-				<div class="min-w-0 flex-1">
-					<h3 class="text-ink truncate text-base font-medium leading-snug">
-						{task.title}
-					</h3>
-					{#if task.notes}
-						<p class="text-ink-secondary mt-0.5 text-sm leading-snug">
-							{task.notes}
-						</p>
-					{/if}
-					{#if showCategory && category}
-						<span
-							class="bg-sunken text-ink-secondary mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
-						>
-							<span
-								class="h-2 w-2 rounded-full"
-								style:background-color={category.color}
-								aria-hidden="true"
-							></span>
-							{category.name}
-						</span>
-					{/if}
-				</div>
-			</div>
-			{#if justSnailed}
-				<span
-					transition:scale={{ duration: 220, start: 0.6 }}
-					class="text-success shrink-0 text-xs font-semibold"
-				>
-					Snailed it!
-				</span>
-			{:else}
-				<span class="shrink-0 text-xs font-medium {statusLabelClass}">
-					{status.label}
-				</span>
-			{/if}
+<article
+	class="bg-elevated border-border-subtle shadow-paper relative flex items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5"
+>
+	<span
+		class="absolute inset-y-0 left-0 w-[3px] {stripeClass}"
+		aria-hidden="true"
+	></span>
+
+	<button
+		type="button"
+		onclick={check}
+		disabled={justSnailed}
+		aria-label="Mark {task.title} done"
+		class="text-ink-tertiary hover:text-success border-border-strong hover:border-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent shrink-0 grid place-items-center h-5 w-5 rounded-full border transition-colors disabled:opacity-50 ml-0.5"
+	>
+		{#if justSnailed}
+			<svg
+				class="h-3 w-3 text-success"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="3"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+				transition:scale={{ duration: 180, start: 0.4 }}
+			>
+				<path d="M5 12l5 5L20 7" />
+			</svg>
+		{/if}
+	</button>
+
+	<div class="min-w-0 flex-1">
+		<div class="text-ink truncate text-sm font-medium leading-tight">
+			{task.title}
 		</div>
-		{#if showActions}
-			<div class="flex flex-wrap items-center gap-2">
-				<Button size="sm" onclick={markDone} disabled={justSnailed}>Mark done</Button>
-				{#if task.lastCompletedAt}
-					<Button variant="secondary" size="sm" onclick={undo}>
-						Undo last
-					</Button>
+		{#if task.notes || (showCategory && category)}
+			<div class="mt-0.5 flex items-center gap-2 text-[11px] text-ink-tertiary">
+				{#if showCategory && category}
+					<span class="inline-flex items-center gap-1">
+						<span
+							class="h-1.5 w-1.5 rounded-full"
+							style:background-color={category.color}
+							aria-hidden="true"
+						></span>
+						{category.name}
+					</span>
 				{/if}
-				<Button
-					variant="ghost"
-					size="sm"
-					class="ml-auto"
-					onclick={() => (editing = true)}
-				>
-					Edit
-				</Button>
-				<Button variant="danger" size="sm" onclick={remove}>Delete</Button>
+				{#if task.notes}
+					<span class="truncate">{task.notes}</span>
+				{/if}
 			</div>
 		{/if}
 	</div>
-</Card>
+
+	{#if justSnailed}
+		<span
+			transition:scale={{ duration: 220, start: 0.6 }}
+			class="text-success shrink-0 text-xs font-semibold"
+		>
+			Snailed it!
+		</span>
+	{:else if status.label}
+		<span class="shrink-0 text-xs font-medium {statusLabelClass}">{status.label}</span>
+	{/if}
+
+	<button
+		type="button"
+		onclick={() => (editing = true)}
+		aria-label="Edit {task.title}"
+		class="text-ink-tertiary hover:text-ink shrink-0 -mr-1 rounded-md p-1 transition-colors"
+	>
+		<svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+			<circle cx="5" cy="12" r="1.5" />
+			<circle cx="12" cy="12" r="1.5" />
+			<circle cx="19" cy="12" r="1.5" />
+		</svg>
+	</button>
+</article>
 
 {#if editing}
 	<TaskEditDialog {task} onClose={() => (editing = false)} />

@@ -22,15 +22,17 @@ test.describe('Local-only task flows', () => {
 	test('complete a task moves it off Focus', async ({ page }) => {
 		await addTodo(page, 'Done soon');
 		await page.getByRole('link', { name: 'Focus' }).first().click();
-		const card = page.locator('article', { hasText: 'Done soon' });
-		await card.getByRole('button', { name: 'Mark done' }).click();
+		const row = page.locator('article', { hasText: 'Done soon' });
+		// Compact row: round checkbox at the front is the primary action.
+		await row.getByRole('button', { name: 'Mark Done soon done' }).click();
 		await expect(page.locator('article', { hasText: 'Done soon' })).toHaveCount(0);
 	});
 
 	test('edit a task title persists on reload', async ({ page }) => {
 		await addTodo(page, 'Original');
-		const card = page.locator('article', { hasText: 'Original' });
-		await card.getByRole('button', { name: 'Edit' }).click();
+		const row = page.locator('article', { hasText: 'Original' });
+		// ⋯ button on the row opens the edit dialog.
+		await row.getByRole('button', { name: 'Edit Original' }).click();
 
 		const dialog = page.getByRole('dialog');
 		await dialog.getByLabel('Title').fill('Renamed');
@@ -42,21 +44,16 @@ test.describe('Local-only task flows', () => {
 		await expect(page.locator('article', { hasText: 'Original' })).toHaveCount(0);
 	});
 
-	test('archive hides task; show archived toggle reveals it', async ({ page }) => {
-		await addTodo(page, 'Will be archived');
-		const card = page.locator('article', { hasText: 'Will be archived' });
-		await card.getByRole('button', { name: 'Edit' }).click();
+	test('delete from edit dialog removes the task', async ({ page }) => {
+		await addTodo(page, 'To be deleted');
+		const row = page.locator('article', { hasText: 'To be deleted' });
+		await row.getByRole('button', { name: 'Edit To be deleted' }).click();
 
-		const dialog = page.getByRole('dialog');
-		await dialog.getByLabel(/Archived/).check();
-		await dialog.getByRole('button', { name: 'Save' }).click();
+		// Accept the confirm() dialog that Delete fires.
+		page.once('dialog', (d) => d.accept());
+		await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
 
-		await expect(page.locator('article', { hasText: 'Will be archived' })).toHaveCount(0);
-
-		// "Show archived" lives on the All page, not Focus.
-		await page.getByRole('link', { name: 'All' }).first().click();
-		await page.getByLabel(/Show archived/).check();
-		await expect(page.locator('article', { hasText: 'Will be archived' })).toBeVisible();
+		await expect(page.locator('article', { hasText: 'To be deleted' })).toHaveCount(0);
 	});
 
 	test('navigation between tabs works', async ({ page }) => {
@@ -147,6 +144,9 @@ test.describe('Local-only task flows', () => {
 		await page.getByLabel('Default contacted (days)').fill('30');
 		await page.getByLabel('Default seen (days)').fill('90');
 		await page.getByRole('button', { name: 'Add category' }).click();
+		// Wait for the category card to render before navigating — otherwise the
+		// follow-up category dropdown can race the store reload.
+		await expect(page.locator('article', { hasText: 'Calm friends' })).toBeVisible();
 
 		await page.goto('/');
 		await page.getByRole('button', { name: 'New task' }).first().click();
