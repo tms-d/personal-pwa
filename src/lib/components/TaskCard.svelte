@@ -2,7 +2,7 @@
 	import type { TaskWithLast } from '$lib/types';
 	import { computeStatus } from '$lib/tasks';
 	import { completeTask, uncompleteTask, deleteTask } from '$lib/tasks';
-	import { reloadTasks } from '$lib/store.svelte';
+	import { reloadTasks, categoryStore } from '$lib/store.svelte';
 	import { Button, Card } from '$lib/ui';
 	import TaskEditDialog from './TaskEditDialog.svelte';
 	import { scale } from 'svelte/transition';
@@ -10,13 +10,17 @@
 	interface Props {
 		task: TaskWithLast;
 		showActions?: boolean;
+		showCategory?: boolean;
 	}
 
-	let { task, showActions = true }: Props = $props();
+	let { task, showActions = true, showCategory = false }: Props = $props();
 	let editing = $state(false);
 	let justSnailed = $state(false);
 
 	const status = $derived(computeStatus(task));
+	const category = $derived(
+		task.categoryId ? categoryStore.items.find((c) => c.id === task.categoryId) : undefined
+	);
 
 	const statusLabelClass = $derived(
 		status.urgency === 'overdue'
@@ -108,6 +112,18 @@
 						<p class="text-ink-secondary mt-0.5 text-sm leading-snug">
 							{task.notes}
 						</p>
+					{/if}
+					{#if showCategory && category}
+						<span
+							class="bg-sunken text-ink-secondary mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium"
+						>
+							<span
+								class="h-2 w-2 rounded-full"
+								style:background-color={category.color}
+								aria-hidden="true"
+							></span>
+							{category.name}
+						</span>
 					{/if}
 				</div>
 			</div>

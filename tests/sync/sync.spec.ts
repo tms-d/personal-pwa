@@ -9,6 +9,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 const config = getSyncConfig();
 
+async function addTodo(page: Page, title: string) {
+	await page.getByRole('button', { name: 'New task' }).first().click();
+	const dialog = page.getByRole('dialog').filter({ hasText: 'New task' });
+	await dialog.getByLabel('Title').fill(title);
+	await dialog.getByRole('button', { name: 'Add task' }).click();
+}
+
 // Hook every page so any client-side error / failed network request /
 // console.error surfaces in the test log. Makes failures self-diagnosing
 // instead of mystery timeouts.
@@ -24,10 +31,23 @@ function instrument(page: Page, label = 'page') {
 	});
 }
 
+// Sync status now lives inside the Account menu — open it (idempotently)
+// before checking. Stays open afterwards; the desktop menu is an inline
+// slide-up inside the sidebar, not an overlay, so it doesn't block
+// subsequent interactions in the main content.
+async function openAccountMenu(page: Page): Promise<void> {
+	const accountBtn = page.getByRole('button', { name: 'Account' }).first();
+	const expanded = await accountBtn.getAttribute('aria-expanded');
+	if (expanded !== 'true') {
+		await accountBtn.click();
+	}
+}
+
 // When a wait for the "Synced" pill is about to fail, capture what the pill
-// actually shows (e.g. "Sync error · message", "Syncing…", "Local only · Sign
-// in") so the failure message tells us what's wrong instead of just timing out.
+// actually shows (e.g. "Sync error · message", "Syncing…") so the failure
+// message tells us what's wrong instead of just timing out.
 async function expectSyncedOrDiagnose(page: Page, timeout = 15_000): Promise<void> {
+	await openAccountMenu(page);
 	try {
 		await expect(page.getByRole('button', { name: /synced/i })).toBeVisible({ timeout });
 	} catch (e) {
@@ -92,8 +112,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		if (!config) return;
 		await page.goto('/all');
 
-		await page.getByLabel('Title').fill('Pushed from client');
-		await page.getByRole('button', { name: 'Add task' }).click();
+		await addTodo(page, 'Pushed from client');
 
 		await expectSyncedOrDiagnose(page);
 
@@ -120,8 +139,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		await expectSyncedOrDiagnose(pageA);
 		await expectSyncedOrDiagnose(pageB);
 
-		await pageA.getByLabel('Title').fill('Made on device A');
-		await pageA.getByRole('button', { name: 'Add task' }).click();
+		await addTodo(pageA, 'Made on device A');
 
 		await expect(pageB.locator('article', { hasText: 'Made on device A' })).toBeVisible({
 			timeout: 10_000
@@ -134,17 +152,19 @@ test.describe('Sync', { tag: '@sync' }, () => {
 	test('sign-out clears local data', async ({ page }) => {
 		if (!config) return;
 		await page.goto('/all');
-		await page.getByLabel('Title').fill('Will be cleared');
-		await page.getByRole('button', { name: 'Add task' }).click();
+		await addTodo(page, 'Will be cleared');
 		await expect(page.locator('article', { hasText: 'Will be cleared' })).toBeVisible();
 
+		// Sign out lives in the Account menu.
+		await page.getByRole('button', { name: 'Account' }).first().click();
 		await page.getByRole('button', { name: /sign out/i }).click();
 		await page
 			.getByRole('dialog')
 			.getByRole('button', { name: /sign out/i })
 			.click();
 
-		await expect(page.getByRole('button', { name: /local only.*sign in/i })).toBeVisible();
+		await page.getByRole('button', { name: 'Account' }).first().click();
+		await expect(page.getByRole('button', { name: /Sign in with GitHub/i })).toBeVisible();
 		await expect(page.locator('article', { hasText: 'Will be cleared' })).toHaveCount(0);
 	});
 });

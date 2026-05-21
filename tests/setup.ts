@@ -18,5 +18,10 @@ afterEach(() => {
 
 beforeEach(async () => {
 	const { db } = await import('$lib/db');
-	await Promise.all([db.tasks.clear(), db.completions.clear(), db.outbox.clear()]);
+	await Promise.all([
+		db.tasks.clear(),
+		db.completions.clear(),
+		db.categories.clear(),
+		db.outbox.clear()
+	]);
 });

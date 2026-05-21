@@ -3,6 +3,7 @@
 	import { updateTask } from '$lib/tasks';
 	import { reloadTasks } from '$lib/store.svelte';
 	import { Button } from '$lib/ui';
+	import CategoryPicker from './CategoryPicker.svelte';
 
 	interface Props {
 		task: Task;
@@ -20,6 +21,7 @@
 	let title = $state(initial.title);
 	let notes = $state(initial.notes ?? '');
 	let kind: TaskKind = $state(initial.kind);
+	let categoryId: string | undefined = $state(initial.categoryId);
 	let period: Period = $state(initial.recurrence?.period ?? 'week');
 	let dueOn: string = $state(
 		initial.recurrence?.dueOn !== undefined ? String(initial.recurrence.dueOn) : ''
@@ -41,6 +43,7 @@
 				title: title.trim(),
 				notes: notes.trim() || undefined,
 				kind,
+				categoryId: categoryId || undefined,
 				archivedAt: archived
 					? (task.archivedAt ?? new Date().toISOString())
 					: undefined,
@@ -103,6 +106,8 @@
 			<span class={labelClass}>Notes</span>
 			<input type="text" bind:value={notes} class={inputClass} />
 		</label>
+
+		<CategoryPicker bind:value={categoryId} />
 
 		{#if kind === 'recurring'}
 			<div class="grid grid-cols-2 gap-3">

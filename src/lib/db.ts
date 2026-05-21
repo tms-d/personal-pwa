@@ -1,9 +1,11 @@
 import Dexie, { type Table } from 'dexie';
-import type { Task, Completion } from './types';
+import type { Task, Completion, Category } from './types';
+
+export type SyncTable = 'tasks' | 'completions' | 'categories';
 
 export interface OutboxEntry {
 	id: string;
-	table: 'tasks' | 'completions';
+	table: SyncTable;
 	rowId: string;
 	queuedAt: string;
 }
@@ -11,6 +13,7 @@ export interface OutboxEntry {
 export class PPODB extends Dexie {
 	tasks!: Table<Task, string>;
 	completions!: Table<Completion, string>;
+	categories!: Table<Category, string>;
 	outbox!: Table<OutboxEntry, string>;
 
 	constructor() {
@@ -42,6 +45,12 @@ export class PPODB extends Dexie {
 		this.version(3).stores({
 			tasks: 'id, kind, archivedAt, createdAt, updatedAt, deletedAt',
 			completions: 'id, taskId, at, updatedAt, deletedAt',
+			outbox: 'id, queuedAt'
+		});
+		this.version(4).stores({
+			tasks: 'id, kind, categoryId, archivedAt, createdAt, updatedAt, deletedAt',
+			completions: 'id, taskId, at, updatedAt, deletedAt',
+			categories: 'id, sortOrder, updatedAt, deletedAt',
 			outbox: 'id, queuedAt'
 		});
 	}

@@ -4,12 +4,15 @@ import {
 	rowToTask,
 	completionToRow,
 	rowToCompletion,
+	categoryToRow,
+	rowToCategory,
 	isRemoteNewer,
 	outboxId,
 	type TaskRow,
-	type CompletionRow
+	type CompletionRow,
+	type CategoryRow
 } from '$lib/sync-helpers';
-import type { Task, Completion } from '$lib/types';
+import type { Task, Completion, Category } from '$lib/types';
 
 const USER_ID = 'user-1';
 
@@ -76,6 +79,7 @@ describe('taskToRow / rowToTask roundtrip', () => {
 			notes: null,
 			tags: null,
 			kind: 'todo',
+			category_id: null,
 			recurrence_period: null,
 			recurrence_every: null,
 			recurrence_due_on: null,
@@ -91,6 +95,63 @@ describe('taskToRow / rowToTask roundtrip', () => {
 		expect(task.archivedAt).toBeUndefined();
 		expect(task.recurrence).toBeUndefined();
 		expect(task.cadence).toBeUndefined();
+		expect(task.categoryId).toBeUndefined();
+	});
+
+	it('roundtrips categoryId', () => {
+		const task: Task = {
+			id: 't6',
+			title: 'Vacuum',
+			kind: 'cadence',
+			categoryId: 'cat-house',
+			cadence: { targetIntervalDays: 7 },
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		const back = rowToTask(taskToRow(task, USER_ID));
+		expect(back.categoryId).toBe('cat-house');
+	});
+});
+
+describe('categoryToRow / rowToCategory roundtrip', () => {
+	it('roundtrips a category', () => {
+		const c: Category = {
+			id: 'cat-1',
+			name: 'House',
+			color: 'var(--color-sage)',
+			sortOrder: 0,
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		expect(rowToCategory(categoryToRow(c, USER_ID))).toEqual(c);
+	});
+
+	it('roundtrips a soft-deleted category', () => {
+		const c: Category = {
+			id: 'cat-2',
+			name: 'Old',
+			color: 'var(--color-blush)',
+			sortOrder: 3,
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-02T00:00:00.000Z',
+			deletedAt: '2026-05-02T00:00:00.000Z'
+		};
+		expect(rowToCategory(categoryToRow(c, USER_ID))).toEqual(c);
+	});
+
+	it('row → category drops null deleted_at to undefined', () => {
+		const row: CategoryRow = {
+			id: 'cat-3',
+			user_id: USER_ID,
+			name: 'Gaming',
+			color: 'var(--color-sky)',
+			sort_order: 1,
+			created_at: '2026-05-01T00:00:00.000Z',
+			updated_at: '2026-05-01T00:00:00.000Z',
+			deleted_at: null
+		};
+		const cat = rowToCategory(row);
+		expect(cat.deletedAt).toBeUndefined();
 	});
 });
 
@@ -169,6 +230,7 @@ describe('row shapes', () => {
 			[
 				'archived_at',
 				'cadence_target_interval_days',
+				'category_id',
 				'created_at',
 				'deleted_at',
 				'id',
@@ -179,6 +241,30 @@ describe('row shapes', () => {
 				'recurrence_period',
 				'tags',
 				'title',
+				'updated_at',
+				'user_id'
+			].sort()
+		);
+	});
+
+	it('CategoryRow has expected keys', () => {
+		const c: Category = {
+			id: 'cat',
+			name: 'X',
+			color: 'var(--color-sage)',
+			sortOrder: 0,
+			createdAt: '2026-05-01T00:00:00.000Z',
+			updatedAt: '2026-05-01T00:00:00.000Z'
+		};
+		const row = categoryToRow(c, USER_ID);
+		expect(Object.keys(row).sort()).toEqual(
+			[
+				'color',
+				'created_at',
+				'deleted_at',
+				'id',
+				'name',
+				'sort_order',
 				'updated_at',
 				'user_id'
 			].sort()

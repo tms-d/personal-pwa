@@ -1,17 +1,20 @@
-import { db } from './db';
+import { db, type SyncTable } from './db';
 import { getSupabase } from './supabase';
 import { authState } from './auth.svelte';
-import { reloadTasks } from './store.svelte';
+import { reloadTasks, reloadCategories } from './store.svelte';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
 	taskToRow,
 	rowToTask,
 	completionToRow,
 	rowToCompletion,
+	categoryToRow,
+	rowToCategory,
 	isRemoteNewer,
 	outboxId,
 	type TaskRow,
-	type CompletionRow
+	type CompletionRow,
+	type CategoryRow
 } from './sync-helpers';
 
 const LAST_SYNC_KEY = 'ppo:lastSyncAt';
@@ -37,7 +40,7 @@ async function refreshPendingCount(): Promise<void> {
 }
 
 export async function enqueuePush(
-	table: 'tasks' | 'completions',
+	table: SyncTable,
 	rowId: string
 ): Promise<void> {
 	const sb = getSupabase();
@@ -77,7 +80,7 @@ export function drainOutbox(): Promise<void> {
 							}
 							const { error } = await sb.from('tasks').upsert(taskToRow(row, userId));
 							if (error) throw error;
-						} else {
+						} else if (entry.table === 'completions') {
 							const row = await db.completions.get(entry.rowId);
 							if (!row) {
 								await db.outbox.delete(entry.id);
@@ -86,6 +89,16 @@ export function drainOutbox(): Promise<void> {
 							const { error } = await sb
 								.from('completions')
 								.upsert(completionToRow(row, userId));
+							if (error) throw error;
+						} else {
+							const row = await db.categories.get(entry.rowId);
+							if (!row) {
+								await db.outbox.delete(entry.id);
+								continue;
+							}
+							const { error } = await sb
+								.from('categories')
+								.upsert(categoryToRow(row, userId));
 							if (error) throw error;
 						}
 						await db.outbox.delete(entry.id);
@@ -136,10 +149,18 @@ export async function fullSync(): Promise<void> {
 
 	try {
 		// 1. Push everything local — idempotent upsert. Covers rows created before
-		//    sign-in (which never got into the outbox).
+		//    sign-in (which never got into the outbox). Categories first so the
+		//    tasks.category_id FK doesn't dangle on the server.
+		const localCategories = await db.categories.toArray();
 		const localTasks = await db.tasks.toArray();
 		const localCompletions = await db.completions.toArray();
 
+		if (localCategories.length > 0) {
+			const { error } = await sb
+				.from('categories')
+				.upsert(localCategories.map((c) => categoryToRow(c, userId)));
+			if (error) throw error;
+		}
 		if (localTasks.length > 0) {
 			const { error } = await sb
 				.from('tasks')
@@ -155,6 +176,8 @@ export async function fullSync(): Promise<void> {
 		await db.outbox.clear();
 
 		// 2. Pull everything from server.
+		const { data: categoryRows, error: cate } = await sb.from('categories').select('*');
+		if (cate) throw cate;
 		const { data: taskRows, error: te } = await sb.from('tasks').select('*');
 		if (te) throw te;
 		const { data: completionRows, error: ce } = await sb.from('completions').select('*');
@@ -162,7 +185,14 @@ export async function fullSync(): Promise<void> {
 
 		// 3. Merge into local. Last-write-wins on updatedAt (non-strict so equal
 		//    timestamps still re-put — harmless and keeps merge symmetric).
-		await db.transaction('rw', db.tasks, db.completions, async () => {
+		await db.transaction('rw', db.tasks, db.completions, db.categories, async () => {
+			for (const r of (categoryRows ?? []) as CategoryRow[]) {
+				const remote = rowToCategory(r);
+				const local = await db.categories.get(remote.id);
+				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, false)) {
+					await db.categories.put(remote);
+				}
+			}
 			for (const r of (taskRows ?? []) as TaskRow[]) {
 				const remote = rowToTask(r);
 				const local = await db.tasks.get(remote.id);
@@ -189,7 +219,7 @@ export async function fullSync(): Promise<void> {
 		syncStatus.state = 'idle';
 		await refreshPendingCount();
 
-		await reloadTasks();
+		await Promise.all([reloadTasks(), reloadCategories()]);
 	} catch (e) {
 		syncStatus.state = 'error';
 		syncStatus.error = errorMessage(e);
@@ -198,13 +228,22 @@ export async function fullSync(): Promise<void> {
 }
 
 let realtimeChannel: RealtimeChannel | null = null;
-let reloadDebounce: ReturnType<typeof setTimeout> | null = null;
+let taskReloadDebounce: ReturnType<typeof setTimeout> | null = null;
+let categoryReloadDebounce: ReturnType<typeof setTimeout> | null = null;
 
-function scheduleReload(): void {
-	if (reloadDebounce) clearTimeout(reloadDebounce);
-	reloadDebounce = setTimeout(() => {
-		reloadDebounce = null;
+function scheduleTaskReload(): void {
+	if (taskReloadDebounce) clearTimeout(taskReloadDebounce);
+	taskReloadDebounce = setTimeout(() => {
+		taskReloadDebounce = null;
 		void reloadTasks();
+	}, 150);
+}
+
+function scheduleCategoryReload(): void {
+	if (categoryReloadDebounce) clearTimeout(categoryReloadDebounce);
+	categoryReloadDebounce = setTimeout(() => {
+		categoryReloadDebounce = null;
+		void reloadCategories();
 	}, 150);
 }
 
@@ -226,7 +265,7 @@ export function subscribeRealtime(): void {
 				const local = await db.tasks.get(remote.id);
 				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, true)) {
 					await db.tasks.put(remote);
-					scheduleReload();
+					scheduleTaskReload();
 				}
 			}
 		)
@@ -240,7 +279,21 @@ export function subscribeRealtime(): void {
 				const local = await db.completions.get(remote.id);
 				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, true)) {
 					await db.completions.put(remote);
-					scheduleReload();
+					scheduleTaskReload();
+				}
+			}
+		)
+		.on(
+			'postgres_changes',
+			{ event: '*', schema: 'public', table: 'categories', filter },
+			async (payload) => {
+				const next = payload.new as Partial<CategoryRow> | undefined;
+				if (!next || !next.id) return;
+				const remote = rowToCategory(next as CategoryRow);
+				const local = await db.categories.get(remote.id);
+				if (isRemoteNewer(local?.updatedAt, remote.updatedAt, true)) {
+					await db.categories.put(remote);
+					scheduleCategoryReload();
 				}
 			}
 		)
@@ -256,9 +309,10 @@ export async function unsubscribeRealtime(): Promise<void> {
 }
 
 export async function clearLocalData(): Promise<void> {
-	await db.transaction('rw', db.tasks, db.completions, db.outbox, async () => {
+	await db.transaction('rw', db.tasks, db.completions, db.categories, db.outbox, async () => {
 		await db.tasks.clear();
 		await db.completions.clear();
+		await db.categories.clear();
 		await db.outbox.clear();
 	});
 	syncStatus.pendingCount = 0;
@@ -270,7 +324,7 @@ export async function clearLocalData(): Promise<void> {
 	} catch {
 		// ignore
 	}
-	await reloadTasks();
+	await Promise.all([reloadTasks(), reloadCategories()]);
 }
 
 export function loadLastSyncedAt(): void {

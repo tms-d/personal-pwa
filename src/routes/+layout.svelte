@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
-	import { reloadTasks } from '$lib/store.svelte';
+	import { reloadTasks, reloadCategories } from '$lib/store.svelte';
 	import { authState, initAuth, onAuthChange, signInWithGitHub } from '$lib/auth.svelte';
 	import {
 		fullSync,
@@ -59,6 +59,7 @@
 	onMount(() => {
 		loadLastSyncedAt();
 		reloadTasks();
+		reloadCategories();
 		initAuth();
 
 		const stopAuth = onAuthChange(async (user) => {
@@ -102,6 +103,7 @@
 		if (path === '/') return 'Focus';
 		if (path.startsWith('/all')) return 'All';
 		if (path.startsWith('/history')) return 'History';
+		if (path.startsWith('/settings')) return 'Settings';
 		return 'Focus';
 	});
 
@@ -205,6 +207,22 @@
 	</svg>
 {/snippet}
 
+{#snippet settingsIcon(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.75"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<circle cx="12" cy="12" r="3" />
+		<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+	</svg>
+{/snippet}
+
 {#snippet signOutIconSvg(cls: string)}
 	<svg
 		class={cls}
@@ -258,6 +276,14 @@
 	>
 		<span class="text-ink-tertiary">{@render historyIcon('h-4 w-4')}</span>
 		History
+	</a>
+	<a
+		href="/settings"
+		onclick={close}
+		class="text-ink-secondary hover:bg-sunken hover:text-ink flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors"
+	>
+		<span class="text-ink-tertiary">{@render settingsIcon('h-4 w-4')}</span>
+		Settings
 	</a>
 	<div class="border-border-subtle my-1 border-t"></div>
 	{#if authState.user}

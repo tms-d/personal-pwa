@@ -22,7 +22,10 @@ vi.mock('$lib/auth.svelte', () => ({
 
 vi.mock('$lib/store.svelte', () => ({
 	taskStore: { items: [], loaded: false },
-	reloadTasks: vi.fn().mockResolvedValue(undefined)
+	categoryStore: { items: [], loaded: false },
+	reloadTasks: vi.fn().mockResolvedValue(undefined),
+	reloadCategories: vi.fn().mockResolvedValue(undefined),
+	reloadAll: vi.fn().mockResolvedValue(undefined)
 }));
 
 const { enqueuePush, drainOutbox, syncStatus, clearLocalData } = await import(

@@ -2,7 +2,8 @@
 // .ts file (no runes) so it's easy to unit-test from Node without spinning
 // up the Svelte compiler.
 
-import type { Task, Completion } from './types';
+import type { Task, Completion, Category } from './types';
+import type { SyncTable } from './db';
 
 export interface TaskRow {
 	id: string;
@@ -11,6 +12,7 @@ export interface TaskRow {
 	notes: string | null;
 	tags: string[] | null;
 	kind: string;
+	category_id: string | null;
 	recurrence_period: string | null;
 	recurrence_every: number | null;
 	recurrence_due_on: string | null;
@@ -30,6 +32,17 @@ export interface CompletionRow {
 	deleted_at: string | null;
 }
 
+export interface CategoryRow {
+	id: string;
+	user_id: string;
+	name: string;
+	color: string;
+	sort_order: number;
+	created_at: string;
+	updated_at: string;
+	deleted_at: string | null;
+}
+
 export function taskToRow(task: Task, userId: string): TaskRow {
 	return {
 		id: task.id,
@@ -38,6 +51,7 @@ export function taskToRow(task: Task, userId: string): TaskRow {
 		notes: task.notes ?? null,
 		tags: task.tags ?? null,
 		kind: task.kind,
+		category_id: task.categoryId ?? null,
 		recurrence_period: task.recurrence?.period ?? null,
 		recurrence_every: task.recurrence?.every ?? null,
 		recurrence_due_on:
@@ -57,6 +71,7 @@ export function rowToTask(row: TaskRow): Task {
 		notes: row.notes ?? undefined,
 		tags: row.tags ?? undefined,
 		kind: row.kind as Task['kind'],
+		categoryId: row.category_id ?? undefined,
 		createdAt: row.created_at,
 		archivedAt: row.archived_at ?? undefined,
 		updatedAt: row.updated_at,
@@ -76,6 +91,31 @@ export function rowToTask(row: TaskRow): Task {
 		task.cadence = { targetIntervalDays: row.cadence_target_interval_days };
 	}
 	return task;
+}
+
+export function categoryToRow(category: Category, userId: string): CategoryRow {
+	return {
+		id: category.id,
+		user_id: userId,
+		name: category.name,
+		color: category.color,
+		sort_order: category.sortOrder,
+		created_at: category.createdAt,
+		updated_at: category.updatedAt,
+		deleted_at: category.deletedAt ?? null
+	};
+}
+
+export function rowToCategory(row: CategoryRow): Category {
+	return {
+		id: row.id,
+		name: row.name,
+		color: row.color,
+		sortOrder: row.sort_order,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+		deletedAt: row.deleted_at ?? undefined
+	};
 }
 
 export function completionToRow(c: Completion, userId: string): CompletionRow {
@@ -113,6 +153,6 @@ export function isRemoteNewer(
 	return strict ? remoteUpdatedAt > localUpdatedAt : remoteUpdatedAt >= localUpdatedAt;
 }
 
-export function outboxId(table: 'tasks' | 'completions', rowId: string): string {
+export function outboxId(table: SyncTable, rowId: string): string {
 	return `${table}:${rowId}`;
 }

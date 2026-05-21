@@ -52,6 +52,9 @@ test.describe('Local-only task flows', () => {
 		await dialog.getByRole('button', { name: 'Save' }).click();
 
 		await expect(page.locator('article', { hasText: 'Will be archived' })).toHaveCount(0);
+
+		// "Show archived" lives on the All page, not Focus.
+		await page.getByRole('link', { name: 'All' }).first().click();
 		await page.getByLabel(/Show archived/).check();
 		await expect(page.locator('article', { hasText: 'Will be archived' })).toBeVisible();
 	});
@@ -74,5 +77,24 @@ test.describe('Local-only task flows', () => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Account' }).first().click();
 		await expect(page.getByRole('button', { name: /Sign in with GitHub/ })).toBeVisible();
+	});
+
+	test('create a category, assign it to a task, see Focus group it', async ({ page }) => {
+		await page.goto('/settings');
+		await page.getByLabel('Name').fill('House');
+		await page.getByRole('button', { name: 'Add category' }).click();
+		await expect(page.locator('article', { hasText: 'House' })).toBeVisible();
+
+		// Create a todo and pick the new category.
+		await page.goto('/');
+		await page.getByRole('button', { name: 'New task' }).first().click();
+		const dialog = page.getByRole('dialog').filter({ hasText: 'New task' });
+		await dialog.getByLabel('Title').fill('Vacuum');
+		await dialog.getByLabel('Category').selectOption({ label: 'House' });
+		await dialog.getByRole('button', { name: 'Add task' }).click();
+
+		// Focus screen shows the House group header and the task under it.
+		await expect(page.getByRole('heading', { name: 'House' })).toBeVisible();
+		await expect(page.locator('article', { hasText: 'Vacuum' })).toBeVisible();
 	});
 });
