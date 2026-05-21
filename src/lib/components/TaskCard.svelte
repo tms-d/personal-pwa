@@ -20,16 +20,6 @@
 		task.categoryId ? categoryStore.items.find((c) => c.id === task.categoryId) : undefined
 	);
 
-	const stripeClass = $derived(
-		status.urgency === 'overdue'
-			? 'bg-danger'
-			: status.urgency === 'due'
-				? 'bg-accent'
-				: status.urgency === 'soon'
-					? 'bg-warning'
-					: 'bg-transparent'
-	);
-
 	const statusLabelClass = $derived(
 		status.urgency === 'overdue'
 			? 'text-danger'
@@ -53,12 +43,15 @@
 </script>
 
 <article
-	class="bg-elevated border-border-subtle shadow-paper relative flex items-center gap-3 overflow-hidden rounded-xl border px-3 py-2.5"
+	class="bg-elevated border-border-subtle shadow-paper relative flex items-center gap-3 overflow-hidden rounded-xl border pl-4 pr-3 py-2.5"
 >
-	<span
-		class="absolute inset-y-0 left-0 w-[3px] {stripeClass}"
-		aria-hidden="true"
-	></span>
+	{#if category}
+		<span
+			class="absolute inset-y-0 left-0 w-[5px]"
+			style:background-color={category.color}
+			aria-hidden="true"
+		></span>
+	{/if}
 
 	<button
 		type="button"

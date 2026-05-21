@@ -84,7 +84,7 @@
 		{#if friends.length > 0}
 			<div class="grid grid-cols-2 gap-2.5">
 				{#each friends as task (task.id)}
-					<FriendTile {task} showCategoryDot={false} />
+					<FriendTile {task} />
 				{/each}
 			</div>
 		{/if}
@@ -118,7 +118,7 @@
 				{#if friends.length > 0}
 					<div class="grid grid-cols-2 gap-2.5">
 						{#each friends as task (task.id)}
-							<FriendTile {task} showCategoryDot={false} />
+							<FriendTile {task} />
 						{/each}
 					</div>
 				{/if}
