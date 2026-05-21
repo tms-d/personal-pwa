@@ -3,6 +3,7 @@
 	import { createTask } from '$lib/tasks';
 	import { reloadTasks } from '$lib/store.svelte';
 	import { Button } from '$lib/ui';
+	import CategoryPicker from './CategoryPicker.svelte';
 
 	interface Props {
 		onCreated?: () => void;
@@ -13,6 +14,7 @@
 	let kind: TaskKind = $state('todo');
 	let title: string = $state('');
 	let notes: string = $state('');
+	let categoryId: string | undefined = $state(undefined);
 	let period: Period = $state('week');
 	let dueOn: string = $state('');
 	let targetIntervalDays: number = $state(7);
@@ -26,7 +28,8 @@
 			const base: Omit<Task, 'id' | 'createdAt' | 'updatedAt'> = {
 				title: title.trim(),
 				notes: notes.trim() || undefined,
-				kind
+				kind,
+				categoryId: categoryId || undefined
 			};
 			if (kind === 'recurring') {
 				base.recurrence = {
@@ -85,6 +88,8 @@
 		<span class={labelClass}>Notes (optional)</span>
 		<input type="text" bind:value={notes} class={inputClass} />
 	</label>
+
+	<CategoryPicker bind:value={categoryId} />
 
 	{#if kind === 'recurring'}
 		<div class="grid grid-cols-2 gap-3">

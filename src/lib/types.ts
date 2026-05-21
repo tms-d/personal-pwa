@@ -18,12 +18,23 @@ export interface Task {
 	notes?: string;
 	tags?: string[];
 	kind: TaskKind;
+	categoryId?: string;
 	createdAt: string;
 	archivedAt?: string;
 	updatedAt: string;
 	deletedAt?: string;
 	recurrence?: Recurrence;
 	cadence?: Cadence;
+}
+
+export interface Category {
+	id: string;
+	name: string;
+	color: string;
+	sortOrder: number;
+	createdAt: string;
+	updatedAt: string;
+	deletedAt?: string;
 }
 
 export interface Completion {
