@@ -13,9 +13,13 @@
 	} from '$lib/sync.svelte';
 	import SyncStatus from '$lib/components/SyncStatus.svelte';
 	import SignOutDialog from '$lib/components/SignOutDialog.svelte';
+	import TaskFormSheet from '$lib/components/TaskFormSheet.svelte';
 
 	let { children } = $props();
 	let signOutOpen = $state(false);
+	let taskSheetOpen = $state(false);
+	let accountOpenDesktop = $state(false);
+	let accountOpenMobile = $state(false);
 
 	onMount(() => {
 		loadLastSyncedAt();
@@ -49,9 +53,8 @@
 	});
 
 	const tabs = [
-		{ href: '/', label: 'Today' },
-		{ href: '/all', label: 'All' },
-		{ href: '/history', label: 'History' }
+		{ href: '/', label: 'Focus' },
+		{ href: '/all', label: 'All' }
 	];
 
 	function isActive(href: string): boolean {
@@ -59,13 +62,51 @@
 		return page.url.pathname.startsWith(href);
 	}
 
-	const pageTitle = $derived(tabs.find((t) => isActive(t.href))?.label ?? 'Today');
+	const pageTitle = $derived.by(() => {
+		const path = page.url.pathname;
+		if (path === '/') return 'Focus';
+		if (path.startsWith('/all')) return 'All';
+		if (path.startsWith('/history')) return 'History';
+		return 'Focus';
+	});
+
+	function closeAccountDesktop() {
+		accountOpenDesktop = false;
+	}
+	function closeAccountMobile() {
+		accountOpenMobile = false;
+	}
 </script>
 
-{#snippet navIcon(href: string, sizeClass: string)}
+{#snippet snailMark(cls: string)}
+	<svg class={cls} viewBox="0 0 512 512" aria-hidden="true">
+		<g fill="currentColor">
+			<path
+				d="M 88 388 C 70 428 122 440 168 436 L 340 430 Q 410 428 442 398 Q 458 376 444 360 Q 422 352 388 358 C 300 372 180 372 115 364 C 84 363 76 376 88 388 Z"
+			/>
+			<circle cx="210" cy="218" r="150" />
+		</g>
+	</svg>
+{/snippet}
+
+{#snippet plusIcon(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		aria-hidden="true"
+	>
+		<path d="M12 5v14M5 12h14" />
+	</svg>
+{/snippet}
+
+{#snippet navIcon(href: string, cls: string)}
 	{#if href === '/'}
 		<svg
-			class={sizeClass}
+			class={cls}
 			viewBox="0 0 24 24"
 			fill="none"
 			stroke="currentColor"
@@ -74,13 +115,12 @@
 			stroke-linejoin="round"
 			aria-hidden="true"
 		>
-			<rect x="3" y="5" width="18" height="16" rx="2.5" />
-			<path d="M16 3v4M8 3v4M3 10h18" />
-			<path d="M9 15.5l2 2 4-4" />
+			<circle cx="12" cy="12" r="9" />
+			<circle cx="12" cy="12" r="3.25" fill="currentColor" stroke="none" />
 		</svg>
-	{:else if href === '/all'}
+	{:else}
 		<svg
-			class={sizeClass}
+			class={cls}
 			viewBox="0 0 24 24"
 			fill="none"
 			stroke="currentColor"
@@ -94,29 +134,123 @@
 			<circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
 			<circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
 		</svg>
-	{:else}
-		<svg
-			class={sizeClass}
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			stroke-width="1.75"
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			aria-hidden="true"
+	{/if}
+{/snippet}
+
+{#snippet personIcon(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.75"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<circle cx="12" cy="8" r="4" />
+		<path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+	</svg>
+{/snippet}
+
+{#snippet historyIcon(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.75"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+		<path d="M3 3v5h5" />
+		<path d="M12 7v5l3 2" />
+	</svg>
+{/snippet}
+
+{#snippet signOutIconSvg(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.75"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<path d="M15 17l5-5-5-5M20 12H9M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" />
+	</svg>
+{/snippet}
+
+{#snippet chevronIcon(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="2"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<path d="M6 9l6 6 6-6" />
+	</svg>
+{/snippet}
+
+{#snippet accountItems(close: () => void)}
+	<a
+		href="/history"
+		onclick={close}
+		class="text-ink-secondary hover:bg-sunken hover:text-ink flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors"
+	>
+		<span class="text-ink-tertiary">{@render historyIcon('h-4 w-4')}</span>
+		History
+	</a>
+	<div class="border-border-subtle my-1 border-t"></div>
+	<div class="px-3 py-1.5">
+		<SyncStatus />
+	</div>
+	{#if authState.user}
+		<button
+			type="button"
+			onclick={() => {
+				close();
+				signOutOpen = true;
+			}}
+			class="text-ink-secondary hover:bg-sunken hover:text-ink flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors"
 		>
-			<path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-			<path d="M3 3v5h5" />
-			<path d="M12 7v5l3 2" />
-		</svg>
+			<span class="text-ink-tertiary">{@render signOutIconSvg('h-4 w-4')}</span>
+			Sign out
+		</button>
 	{/if}
 {/snippet}
 
 <!-- Desktop left rail -->
 <aside
-	class="border-border-subtle bg-elevated/40 fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r px-4 pb-7 pt-[calc(env(safe-area-inset-top)+1.75rem)] md:flex"
+	class="border-border-subtle bg-elevated/40 fixed inset-y-0 left-0 z-30 hidden w-60 flex-col border-r px-4 pb-5 pt-[calc(env(safe-area-inset-top)+1.75rem)] md:flex"
 	aria-label="Primary"
 >
+	<a
+		href="/"
+		class="text-accent hover:text-accent-hover mb-6 flex items-center gap-2 px-2 transition-colors"
+		aria-label="Snail — home"
+	>
+		{@render snailMark('h-7 w-7')}
+		<span class="text-ink text-lg font-semibold tracking-tight">Snail</span>
+	</a>
+
+	<button
+		type="button"
+		onclick={() => (taskSheetOpen = true)}
+		class="bg-accent text-on-accent hover:bg-accent-hover shadow-paper mb-4 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
+	>
+		{@render plusIcon('h-4 w-4')}
+		New task
+	</button>
+
 	<nav class="flex flex-col gap-1">
 		{#each tabs as tab (tab.href)}
 			{@const active = isActive(tab.href)}
@@ -139,18 +273,40 @@
 	</nav>
 
 	{#if authState.configured && !authState.loading}
-		<div
-			class="border-border-subtle mt-auto flex flex-col items-start gap-2 border-t px-3 pt-4"
-		>
-			<SyncStatus />
-			{#if authState.user}
+		<div class="relative mt-auto">
+			<button
+				type="button"
+				onclick={() => (accountOpenDesktop = !accountOpenDesktop)}
+				aria-expanded={accountOpenDesktop}
+				aria-label="Account"
+				class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors"
+				class:bg-sunken={accountOpenDesktop}
+				class:hover:bg-sunken={!accountOpenDesktop}
+			>
+				<span
+					class="bg-accent-soft text-accent flex h-7 w-7 items-center justify-center rounded-full"
+				>
+					{@render personIcon('h-4 w-4')}
+				</span>
+				<span class="text-ink flex-1 text-left text-sm font-medium">Account</span>
+				<span class="text-ink-tertiary transition-transform" class:rotate-180={accountOpenDesktop}>
+					{@render chevronIcon('h-3.5 w-3.5')}
+				</span>
+			</button>
+			{#if accountOpenDesktop}
+				<!-- click-outside catcher -->
 				<button
 					type="button"
-					onclick={() => (signOutOpen = true)}
-					class="text-ink-tertiary hover:text-ink text-xs transition-colors"
+					aria-label="Close account menu"
+					class="fixed inset-0 z-40 cursor-default"
+					onclick={closeAccountDesktop}
+				></button>
+				<div
+					class="bg-elevated border-border-subtle absolute bottom-full left-0 right-0 z-50 mb-2 flex flex-col rounded-xl border p-1.5 shadow-[var(--shadow-paper-overlay)]"
+					role="menu"
 				>
-					Sign out
-				</button>
+					{@render accountItems(closeAccountDesktop)}
+				</div>
 			{/if}
 		</div>
 	{/if}
@@ -160,31 +316,21 @@
 <div class="md:pl-60">
 	<div class="mx-auto flex min-h-screen max-w-2xl flex-col">
 		<header
-			class="flex items-start justify-between px-5 pb-4 pt-[calc(env(safe-area-inset-top)+1.75rem)]"
+			class="flex items-center justify-between px-5 pb-3 pt-[calc(env(safe-area-inset-top)+1.5rem)] md:pt-[calc(env(safe-area-inset-top)+1.75rem)]"
 		>
-			<div class="flex flex-col gap-0.5">
-				<span
-					class="text-ink-tertiary text-[11px] font-medium uppercase tracking-[0.15em]"
-				>
-					Personal priority overview
-				</span>
-				<h1 class="text-ink text-2xl font-semibold tracking-tight">
-					{pageTitle}
-				</h1>
-			</div>
+			<h1 class="text-ink text-2xl font-semibold tracking-tight">
+				{pageTitle}
+			</h1>
+
 			{#if authState.configured && !authState.loading}
-				<div class="flex flex-col items-end gap-1.5 md:hidden">
-					<SyncStatus />
-					{#if authState.user}
-						<button
-							type="button"
-							onclick={() => (signOutOpen = true)}
-							class="text-ink-tertiary hover:text-ink text-xs transition-colors"
-						>
-							Sign out
-						</button>
-					{/if}
-				</div>
+				<button
+					type="button"
+					onclick={() => (accountOpenMobile = true)}
+					aria-label="Account"
+					class="bg-sunken text-ink-tertiary hover:text-ink flex h-9 w-9 items-center justify-center rounded-full transition-colors md:hidden"
+				>
+					{@render personIcon('h-[18px] w-[18px]')}
+				</button>
 			{/if}
 		</header>
 
@@ -196,27 +342,67 @@
 	</div>
 </div>
 
-<!-- Mobile bottom tab bar -->
+<!-- Mobile bottom bar: Focus | + | All -->
 <nav
 	class="border-border-subtle bg-elevated/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-md md:hidden"
 	style="padding-bottom: env(safe-area-inset-bottom);"
 	aria-label="Primary"
 >
-	<div class="grid grid-cols-3">
-		{#each tabs as tab (tab.href)}
-			{@const active = isActive(tab.href)}
-			<a
-				href={tab.href}
-				class="flex flex-col items-center gap-1 py-2.5 transition-colors"
-				class:text-accent={active}
-				class:text-ink-tertiary={!active}
-				aria-current={active ? 'page' : undefined}
+	<div class="grid grid-cols-3 items-stretch">
+		<a
+			href="/"
+			class="flex flex-col items-center gap-1 py-2.5 transition-colors"
+			class:text-accent={isActive('/')}
+			class:text-ink-tertiary={!isActive('/')}
+			aria-current={isActive('/') ? 'page' : undefined}
+		>
+			{@render navIcon('/', 'h-[22px] w-[22px]')}
+			<span class="text-[11px] font-medium">Focus</span>
+		</a>
+
+		<div class="flex items-center justify-center py-1.5">
+			<button
+				type="button"
+				onclick={() => (taskSheetOpen = true)}
+				aria-label="New task"
+				class="bg-accent text-on-accent hover:bg-accent-hover shadow-paper flex h-12 w-12 items-center justify-center rounded-full transition-colors"
 			>
-				{@render navIcon(tab.href, 'h-[22px] w-[22px]')}
-				<span class="text-[11px] font-medium">{tab.label}</span>
-			</a>
-		{/each}
+				{@render plusIcon('h-6 w-6')}
+			</button>
+		</div>
+
+		<a
+			href="/all"
+			class="flex flex-col items-center gap-1 py-2.5 transition-colors"
+			class:text-accent={isActive('/all')}
+			class:text-ink-tertiary={!isActive('/all')}
+			aria-current={isActive('/all') ? 'page' : undefined}
+		>
+			{@render navIcon('/all', 'h-[22px] w-[22px]')}
+			<span class="text-[11px] font-medium">All</span>
+		</a>
 	</div>
 </nav>
 
+<!-- Mobile account bottom sheet -->
+{#if accountOpenMobile}
+	<button
+		type="button"
+		aria-label="Close account menu"
+		class="fixed inset-0 z-50 cursor-default bg-black/40 backdrop-blur-sm md:hidden"
+		onclick={closeAccountMobile}
+	></button>
+	<div
+		class="bg-elevated border-border-subtle fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[var(--shadow-paper-overlay)] md:hidden"
+		role="dialog"
+		aria-label="Account"
+	>
+		<div class="bg-border-strong mx-auto mb-3 h-1 w-10 rounded-full"></div>
+		<div class="flex flex-col">
+			{@render accountItems(closeAccountMobile)}
+		</div>
+	</div>
+{/if}
+
+<TaskFormSheet bind:open={taskSheetOpen} />
 <SignOutDialog bind:open={signOutOpen} />
