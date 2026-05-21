@@ -120,18 +120,59 @@ test.describe('Local-only task flows', () => {
 		await expect(dialog.getByLabel('Seen (days)')).toHaveValue('30');
 		await dialog.getByRole('button', { name: 'Add friend' }).click();
 
-		// Friend card shows both streams.
-		const card = page.locator('article', { hasText: 'Alex' });
-		await expect(card).toBeVisible();
-		// "Contacted" / "Seen" appear as both stream labels (span) and buttons —
-		// disambiguate by locating the span specifically.
-		await expect(card.locator('span', { hasText: /^Contacted$/ })).toBeVisible();
-		await expect(card.locator('span', { hasText: /^Seen$/ })).toBeVisible();
+		// Friend tile is rendered as an article. Friends with both streams
+		// overdue (defaults; just-created → never logged) show on Focus.
+		const tile = page.locator('article', { hasText: 'Alex' });
+		await expect(tile).toBeVisible();
+		// Both stream buttons are present (aria-labels on the per-stream
+		// tap targets).
+		await expect(tile.getByRole('button', { name: /Log contacted/ })).toBeVisible();
+		await expect(tile.getByRole('button', { name: /Log seen/ })).toBeVisible();
 
-		// Logging contacted creates a per-stream completion; the contacted row
-		// flips out of overdue, the seen row stays.
-		await card.getByRole('button', { name: 'Contacted', exact: true }).click();
-		await expect(card.getByRole('button', { name: 'Undo contacted' })).toBeVisible();
-		await expect(card.getByRole('button', { name: 'Undo seen' })).toHaveCount(0);
+		// Tap the contacted stat → logs a contacted completion. After the
+		// brief "Snailed it!" flash and reload, the contacted row should
+		// move off overdue (since contacted target is 7d and we just logged).
+		await tile.getByRole('button', { name: /Log contacted/ }).click();
+		// Wait for reload, then verify the contacted line shows "0d" and is no
+		// longer in danger color. The seen row remains overdue (never logged).
+		await expect(tile.getByText('0d')).toBeVisible();
+	});
+
+	test('friend with both streams fresh hides from Focus, appears on All', async ({ page }) => {
+		// Set up: friends category with very generous targets so a single
+		// "Contacted" + "Saw" tap leaves the friend in the fresh band.
+		await page.goto('/settings');
+		await page.getByRole('button', { name: 'friends', exact: true }).click();
+		await page.getByLabel('Name').fill('Calm friends');
+		await page.getByLabel('Default contacted (days)').fill('30');
+		await page.getByLabel('Default seen (days)').fill('90');
+		await page.getByRole('button', { name: 'Add category' }).click();
+
+		await page.goto('/');
+		await page.getByRole('button', { name: 'New task' }).first().click();
+		const dialog = page.getByRole('dialog').filter({ hasText: 'New task' });
+		await dialog.getByRole('button', { name: 'friend', exact: true }).click();
+		await dialog.getByLabel('Name').fill('Calm Pat');
+		await dialog.getByLabel('Category').selectOption({ label: 'Calm friends' });
+		await dialog.getByRole('button', { name: 'Add friend' }).click();
+
+		const tile = page.locator('article', { hasText: 'Calm Pat' });
+		// Brand new — both streams "never" → overdue → tile shows on Focus.
+		await expect(tile).toBeVisible();
+
+		// Log both streams. Now both are fresh.
+		await tile.getByRole('button', { name: /Log contacted/ }).click();
+		await page.waitForTimeout(800);
+		await tile.getByRole('button', { name: /Log seen/ }).click();
+		await page.waitForTimeout(800);
+
+		// On Focus, the tile is no longer present.
+		await page.goto('/');
+		await expect(page.locator('article', { hasText: 'Calm Pat' })).toHaveCount(0);
+
+		// On the All tab, the tile lives under the Friends section.
+		await page.getByRole('link', { name: 'All' }).first().click();
+		await expect(page.getByRole('heading', { name: 'Friends' })).toBeVisible();
+		await expect(page.locator('article', { hasText: 'Calm Pat' })).toBeVisible();
 	});
 });

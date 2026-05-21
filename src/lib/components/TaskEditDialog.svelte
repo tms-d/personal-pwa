@@ -1,6 +1,6 @@
 <script lang="ts">
-	import type { Task, TaskKind, Period } from '$lib/types';
-	import { updateTask } from '$lib/tasks';
+	import type { Task, TaskKind, Period, CompletionStream } from '$lib/types';
+	import { updateTask, uncompleteTask } from '$lib/tasks';
 	import { reloadTasks } from '$lib/store.svelte';
 	import { Button } from '$lib/ui';
 	import CategoryPicker from './CategoryPicker.svelte';
@@ -71,6 +71,11 @@
 		} finally {
 			saving = false;
 		}
+	}
+
+	async function undoStream(stream: CompletionStream) {
+		await uncompleteTask(task.id, stream);
+		await reloadTasks();
 	}
 
 	const inputClass =
@@ -161,6 +166,16 @@
 					<span class={labelClass}>Seen (days)</span>
 					<input type="number" min="1" bind:value={seenTargetDays} class={inputClass} required />
 				</label>
+			</div>
+			<div class="flex flex-wrap gap-2">
+				{#if initial.kind === 'friend'}
+					<Button variant="secondary" size="sm" onclick={() => undoStream('contacted')}>
+						Undo last contacted
+					</Button>
+					<Button variant="secondary" size="sm" onclick={() => undoStream('seen')}>
+						Undo last seen
+					</Button>
+				{/if}
 			</div>
 		{/if}
 
