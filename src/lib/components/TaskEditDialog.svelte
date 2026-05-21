@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { TaskWithLast, Task, TaskKind, Period, CompletionStream } from '$lib/types';
-	import { updateTask, deleteTask, setLastCompletedAt, uncompleteTask } from '$lib/tasks';
+	import { updateTask, deleteTask, setLastCompletedAt, uncompleteTask, WEEKDAYS } from '$lib/tasks';
 	import { reloadTasks } from '$lib/store.svelte';
 	import { Button } from '$lib/ui';
 	import CategoryPicker from './CategoryPicker.svelte';
@@ -169,12 +169,21 @@
 				</label>
 				<label class="flex flex-col gap-1.5">
 					<span class={labelClass}>Due on (optional)</span>
-					<input
-						type="text"
-						bind:value={dueOn}
-						placeholder={period === 'week' ? 'weekday 0–6' : 'day or "end"'}
-						class={inputClass}
-					/>
+					{#if period === 'week'}
+						<select bind:value={dueOn} class={inputClass}>
+							<option value="">any day</option>
+							{#each WEEKDAYS as name, i (i)}
+								<option value={String(i)}>{name}</option>
+							{/each}
+						</select>
+					{:else}
+						<input
+							type="text"
+							bind:value={dueOn}
+							placeholder={'day or "end"'}
+							class={inputClass}
+						/>
+					{/if}
 				</label>
 			</div>
 		{/if}

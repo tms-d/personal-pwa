@@ -221,8 +221,8 @@ describe('computeStatus', () => {
 			expect(status.urgency).toBe('due');
 		});
 
-		it('done 18 days ago, target 30 → soon (>= 50%)', () => {
-			const lastAt = new Date(now.getTime() - 18 * 86_400_000).toISOString();
+		it('done 22 days ago, target 30 → soon (>= 70%)', () => {
+			const lastAt = new Date(now.getTime() - 22 * 86_400_000).toISOString();
 			const task = withLast({
 				kind: 'cadence',
 				cadence: { targetIntervalDays: 30 },
@@ -230,6 +230,17 @@ describe('computeStatus', () => {
 			});
 			const status = computeStatus(task, now);
 			expect(status.urgency).toBe('soon');
+		});
+
+		it('done 18 days ago, target 30 → fresh (60% — under 70% soon threshold)', () => {
+			const lastAt = new Date(now.getTime() - 18 * 86_400_000).toISOString();
+			const task = withLast({
+				kind: 'cadence',
+				cadence: { targetIntervalDays: 30 },
+				lastCompletedAt: lastAt
+			});
+			const status = computeStatus(task, now);
+			expect(status.urgency).toBe('fresh');
 		});
 
 		it('done 40 days ago, target 30 → overdue with positive overdueDays', () => {
