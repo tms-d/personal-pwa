@@ -1,7 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-	<rect width="512" height="512" rx="96" fill="#1c1917" />
-	<g fill="#fafaf9" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-weight="700">
-		<text x="256" y="290" font-size="220" text-anchor="middle">P</text>
-		<circle cx="376" cy="156" r="32" fill="#f97316" />
+	<rect width="512" height="512" rx="96" fill="#faf7f0" />
+	<g fill="#c8674d">
+		<path d="M 88 388
+			C 70 428 122 440 168 436
+			L 340 430
+			Q 410 428 442 398
+			Q 458 376 444 360
+			Q 422 352 388 358
+			C 300 372 180 372 115 364
+			C 84 363 76 376 88 388 Z" />
+		<circle cx="210" cy="218" r="150" />
+	</g>
+	<g fill="none" stroke="#faf7f0" stroke-width="24" stroke-linecap="round">
+		<path d="M 210 86
+			A 132 132 0 0 0 210 350
+			A 110 110 0 0 1 210 130
+			A 88 88 0 0 0 210 306
+			A 66 66 0 0 1 210 174
+			A 44 44 0 0 0 210 262
+			A 22 22 0 0 1 210 216" />
 	</g>
 </svg>

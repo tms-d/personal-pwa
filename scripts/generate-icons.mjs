@@ -29,7 +29,7 @@ for (const t of targets) {
 			width: t.size,
 			height: t.size,
 			channels: 4,
-			background: '#1c1917'
+			background: '#faf7f0'
 		}
 	})
 		.composite([{ input: rendered, top: offset, left: offset }])

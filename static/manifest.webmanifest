@@ -1,13 +1,13 @@
 {
-	"name": "Personal Priority Overview",
-	"short_name": "PPO",
+	"name": "Snail",
+	"short_name": "Snail",
 	"description": "Recurring todos, cadence tracking, and last-done memory.",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",
 	"orientation": "portrait",
-	"background_color": "#fafaf9",
-	"theme_color": "#1c1917",
+	"background_color": "#faf7f0",
+	"theme_color": "#faf7f0",
 	"icons": [
 		{
 			"src": "/icons/icon-192.png",
