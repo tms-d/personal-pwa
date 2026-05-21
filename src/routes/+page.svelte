@@ -8,12 +8,12 @@
 
 	const urgencyOrder = { overdue: 0, due: 1, soon: 2, fresh: 3 } as const;
 
-	// Friends only surface on Focus when at least one stream is breached
-	// (urgency > fresh). Calm friends live on the All tab.
+	// Friends and cadence tasks only surface on Focus when they're past the
+	// "soon" threshold (last ~30% of their target). Calm ones live on All.
 	function shouldShowOnFocus(t: TaskWithLast): boolean {
 		const s = computeStatus(t);
 		if (!s.visible) return false;
-		if (t.kind === 'friend') return s.urgency !== 'fresh';
+		if (t.kind === 'friend' || t.kind === 'cadence') return s.urgency !== 'fresh';
 		return true;
 	}
 

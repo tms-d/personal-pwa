@@ -4,6 +4,18 @@ import { enqueuePush } from './sync.svelte';
 
 const MS_PER_DAY = 86_400_000;
 
+// Week is Monday-indexed (see periodStart). Recurrence.dueOn uses this
+// indexing too, so the labels and the stored integer line up.
+export const WEEKDAYS = [
+	'Monday',
+	'Tuesday',
+	'Wednesday',
+	'Thursday',
+	'Friday',
+	'Saturday',
+	'Sunday'
+] as const;
+
 export function periodStart(period: Period, now = new Date()): Date {
 	const d = new Date(now);
 	d.setHours(0, 0, 0, 0);
@@ -84,7 +96,7 @@ function cadenceStatus(
 			? 'overdue'
 			: since >= targetDays * 0.8
 				? 'due'
-				: since >= targetDays * 0.5
+				: since >= targetDays * 0.7
 					? 'soon'
 					: 'fresh';
 	return { overdueDays, urgency, label: `${since}d ago · target ${targetDays}d` };
