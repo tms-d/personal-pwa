@@ -31,10 +31,23 @@ function instrument(page: Page, label = 'page') {
 	});
 }
 
+// Sync status now lives inside the Account menu — open it (idempotently)
+// before checking. Stays open afterwards; the desktop menu is an inline
+// slide-up inside the sidebar, not an overlay, so it doesn't block
+// subsequent interactions in the main content.
+async function openAccountMenu(page: Page): Promise<void> {
+	const accountBtn = page.getByRole('button', { name: 'Account' }).first();
+	const expanded = await accountBtn.getAttribute('aria-expanded');
+	if (expanded !== 'true') {
+		await accountBtn.click();
+	}
+}
+
 // When a wait for the "Synced" pill is about to fail, capture what the pill
-// actually shows (e.g. "Sync error · message", "Syncing…", "Local only · Sign
-// in") so the failure message tells us what's wrong instead of just timing out.
+// actually shows (e.g. "Sync error · message", "Syncing…") so the failure
+// message tells us what's wrong instead of just timing out.
 async function expectSyncedOrDiagnose(page: Page, timeout = 15_000): Promise<void> {
+	await openAccountMenu(page);
 	try {
 		await expect(page.getByRole('button', { name: /synced/i })).toBeVisible({ timeout });
 	} catch (e) {
