@@ -3,15 +3,15 @@
 	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import { reloadTasks } from '$lib/store.svelte';
-	import { authState, initAuth, onAuthChange } from '$lib/auth.svelte';
+	import { authState, initAuth, onAuthChange, signInWithGitHub } from '$lib/auth.svelte';
 	import {
 		fullSync,
 		loadLastSyncedAt,
 		subscribeRealtime,
 		unsubscribeRealtime,
-		drainOutbox
+		drainOutbox,
+		syncStatus
 	} from '$lib/sync.svelte';
-	import SyncStatus from '$lib/components/SyncStatus.svelte';
 	import SignOutDialog from '$lib/components/SignOutDialog.svelte';
 	import TaskFormSheet from '$lib/components/TaskFormSheet.svelte';
 	import { slide, fly, fade } from 'svelte/transition';
@@ -21,6 +21,40 @@
 	let taskSheetOpen = $state(false);
 	let accountOpenDesktop = $state(false);
 	let accountOpenMobile = $state(false);
+	let signingIn = $state(false);
+
+	async function signIn() {
+		signingIn = true;
+		try {
+			await signInWithGitHub();
+		} finally {
+			signingIn = false;
+		}
+	}
+
+	const syncLabel = $derived.by(() => {
+		if (syncStatus.state === 'syncing') return 'Syncing…';
+		if (syncStatus.state === 'error') return 'Sync error';
+		if (syncStatus.pendingCount > 0) return `${syncStatus.pendingCount} pending`;
+		if (syncStatus.lastSyncedAt) {
+			const d = new Date(syncStatus.lastSyncedAt);
+			const today = new Date();
+			const sameDay = d.toDateString() === today.toDateString();
+			const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			return sameDay ? `Synced ${t}` : `Synced ${d.toLocaleDateString()} ${t}`;
+		}
+		return 'Not synced yet';
+	});
+
+	const syncDotClass = $derived(
+		syncStatus.state === 'syncing'
+			? 'bg-info animate-pulse'
+			: syncStatus.state === 'error'
+				? 'bg-danger'
+				: syncStatus.pendingCount > 0
+					? 'bg-warning'
+					: 'bg-success'
+	);
 
 	onMount(() => {
 		loadLastSyncedAt();
@@ -186,6 +220,21 @@
 	</svg>
 {/snippet}
 
+{#snippet signInIconSvg(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.75"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<path d="M9 17l5-5-5-5M14 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+	</svg>
+{/snippet}
+
 {#snippet chevronIcon(cls: string)}
 	<svg
 		class={cls}
@@ -211,10 +260,18 @@
 		History
 	</a>
 	<div class="border-border-subtle my-1 border-t"></div>
-	<div class="px-3 py-1.5">
-		<SyncStatus />
-	</div>
 	{#if authState.user}
+		<button
+			type="button"
+			onclick={() => fullSync()}
+			title={syncStatus.error ?? 'Tap to sync now'}
+			class="text-ink-secondary hover:bg-sunken hover:text-ink flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors"
+		>
+			<span class="flex h-4 w-4 items-center justify-center">
+				<span class="h-2 w-2 rounded-full {syncDotClass}"></span>
+			</span>
+			{syncLabel}
+		</button>
 		<button
 			type="button"
 			onclick={() => {
@@ -225,6 +282,16 @@
 		>
 			<span class="text-ink-tertiary">{@render signOutIconSvg('h-4 w-4')}</span>
 			Sign out
+		</button>
+	{:else}
+		<button
+			type="button"
+			onclick={signIn}
+			disabled={signingIn}
+			class="text-ink-secondary hover:bg-sunken hover:text-ink flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors disabled:opacity-50"
+		>
+			<span class="text-ink-tertiary">{@render signInIconSvg('h-4 w-4')}</span>
+			{signingIn ? 'Redirecting…' : 'Sign in with GitHub'}
 		</button>
 	{/if}
 {/snippet}

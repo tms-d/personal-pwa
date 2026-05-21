@@ -70,9 +70,9 @@ test.describe('Local-only task flows', () => {
 		await expect(page).toHaveURL(/\/$/);
 	});
 
-	test('account menu shows "Local only · Sign in" when not signed in', async ({ page }) => {
+	test('account menu shows "Sign in with GitHub" when not signed in', async ({ page }) => {
 		await page.goto('/');
 		await page.getByRole('button', { name: 'Account' }).first().click();
-		await expect(page.getByRole('button', { name: /Local only.*Sign in/ })).toBeVisible();
+		await expect(page.getByRole('button', { name: /Sign in with GitHub/ })).toBeVisible();
 	});
 });
