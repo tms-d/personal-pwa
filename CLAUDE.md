@@ -50,6 +50,31 @@ sync can propagate deletions.
   actually inlines `import.meta.env.PUBLIC_*` (its default only covers
   `VITE_`).
 
+## Bug reports
+
+- "Report a bug" menu item under the Account menu (signed-in users only,
+  since the function requires a Supabase JWT).
+- Click flow: close the menu → `modern-screenshot` captures the page
+  (the dialog itself is excluded via `data-no-screenshot`) → dialog
+  opens with a textarea + screenshot preview → submit calls the
+  `report-bug` Supabase Edge Function → "Thanks" state with the issue
+  URL.
+- Function (`supabase/functions/report-bug/`): verifies the JWT, uploads
+  the PNG to the `bug-reports` Storage bucket as `${user_id}/${ts}.png`,
+  then POSTs `https://api.github.com/repos/{GITHUB_REPO}/issues` using
+  `GITHUB_PAT`. Both are function secrets — set them in the Supabase
+  dashboard (Edge Functions → report-bug → Secrets):
+  - `GITHUB_PAT` — fine-grained PAT, scoped to this repo, "Issues:
+    write" permission only.
+  - `GITHUB_REPO` — `tms-d/personal-pwa`.
+- Bucket is created by
+  `supabase/migrations/20260522180000_bug_reports_bucket.sql` as
+  `public=true` so the markdown image in the issue body renders.
+- Function deploy: Supabase's GitHub integration deploys
+  `supabase/functions/*` automatically on push to `main` *if* the
+  integration is configured to do so. If not, deploy once with
+  `supabase functions deploy report-bug`.
+
 ## Sync
 
 - Schema in `supabase/migrations/`. Supabase GitHub integration applies

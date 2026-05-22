@@ -14,6 +14,8 @@
 	} from '$lib/sync.svelte';
 	import SignOutDialog from '$lib/components/SignOutDialog.svelte';
 	import TaskFormSheet from '$lib/components/TaskFormSheet.svelte';
+	import BugReportDialog from '$lib/components/BugReportDialog.svelte';
+	import { captureScreenshot } from '$lib/bug-report';
 	import { slide, fly, fade } from 'svelte/transition';
 
 	let { children } = $props();
@@ -22,6 +24,17 @@
 	let accountOpenDesktop = $state(false);
 	let accountOpenMobile = $state(false);
 	let signingIn = $state(false);
+	let bugReportOpen = $state(false);
+	let bugScreenshot = $state<Blob | null>(null);
+
+	async function openBugReport(close: () => void) {
+		close();
+		// Capture the screenshot *before* the dialog opens — and after the
+		// account menu has closed — so neither overlays the page.
+		await new Promise((r) => setTimeout(r, 80));
+		bugScreenshot = await captureScreenshot();
+		bugReportOpen = true;
+	}
 
 	async function signIn() {
 		signingIn = true;
@@ -223,6 +236,30 @@
 	</svg>
 {/snippet}
 
+{#snippet bugIcon(cls: string)}
+	<svg
+		class={cls}
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.75"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+		aria-hidden="true"
+	>
+		<path d="M8 2l1.5 2.5" />
+		<path d="M16 2l-1.5 2.5" />
+		<rect x="6" y="7" width="12" height="13" rx="6" />
+		<path d="M12 7v13" />
+		<path d="M3 12h3" />
+		<path d="M18 12h3" />
+		<path d="M3 8l3 2" />
+		<path d="M21 8l-3 2" />
+		<path d="M3 16l3-2" />
+		<path d="M21 16l-3-2" />
+	</svg>
+{/snippet}
+
 {#snippet signOutIconSvg(cls: string)}
 	<svg
 		class={cls}
@@ -297,6 +334,14 @@
 				<span class="h-2 w-2 rounded-full {syncDotClass}"></span>
 			</span>
 			{syncLabel}
+		</button>
+		<button
+			type="button"
+			onclick={() => openBugReport(close)}
+			class="text-ink-secondary hover:bg-sunken hover:text-ink flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors"
+		>
+			<span class="text-ink-tertiary">{@render bugIcon('h-4 w-4')}</span>
+			Report a bug
 		</button>
 		<button
 			type="button"
@@ -520,3 +565,8 @@
 
 <TaskFormSheet bind:open={taskSheetOpen} />
 <SignOutDialog bind:open={signOutOpen} />
+<BugReportDialog
+	bind:open={bugReportOpen}
+	screenshot={bugScreenshot}
+	onClose={() => (bugScreenshot = null)}
+/>
