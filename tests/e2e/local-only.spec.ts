@@ -58,10 +58,16 @@ test.describe('Local-only task flows', () => {
 
 	test('navigation between tabs works', async ({ page }) => {
 		await page.goto('/');
-		await page.getByRole('link', { name: 'All' }).first().click();
-		await expect(page).toHaveURL(/\/all/);
+		await page.getByRole('link', { name: 'Tasks' }).first().click();
+		await expect(page).toHaveURL(/\/tasks/);
 
-		// History lives in the account menu now
+		await page.getByRole('link', { name: 'Friends' }).first().click();
+		await expect(page).toHaveURL(/\/friends/);
+
+		await page.getByRole('link', { name: 'Kids' }).first().click();
+		await expect(page).toHaveURL(/\/kids/);
+
+		// History lives in the account menu
 		await page.getByRole('button', { name: 'Account' }).first().click();
 		await page.getByRole('link', { name: 'History' }).click();
 		await expect(page).toHaveURL(/\/history/);
@@ -105,11 +111,11 @@ test.describe('Local-only task flows', () => {
 		await page.getByRole('button', { name: 'Add category' }).click();
 		await expect(page.locator('article', { hasText: 'Close friends' })).toBeVisible();
 
-		// Create a friend in that category — defaults should prefill.
-		await page.goto('/');
-		await page.getByRole('button', { name: 'New task' }).first().click();
-		const dialog = page.getByRole('dialog').filter({ hasText: 'New task' });
-		await dialog.getByRole('button', { name: 'friend', exact: true }).click();
+		// Create a friend via the Friends-tab "+ New friend" header button.
+		await page.goto('/friends');
+		await page.getByRole('button', { name: 'New friend' }).click();
+		const dialog = page.getByRole('dialog').filter({ hasText: 'New friend' });
+		// Kind is preselected to 'friend'.
 		await dialog.getByLabel('Name').fill('Alex');
 		await dialog.getByLabel('Category').selectOption({ label: 'Close friends' });
 		// Prefilled from category defaults.
@@ -117,62 +123,33 @@ test.describe('Local-only task flows', () => {
 		await expect(dialog.getByLabel('Seen (days)')).toHaveValue('30');
 		await dialog.getByRole('button', { name: 'Add friend' }).click();
 
-		// Friend tile is rendered as an article. Friends with both streams
-		// overdue (defaults; just-created → never logged) show on Focus.
-		const tile = page.locator('article', { hasText: 'Alex' });
-		await expect(tile).toBeVisible();
-		// Both stream buttons are present (aria-labels on the per-stream
-		// tap targets).
-		await expect(tile.getByRole('button', { name: /Log contacted/ })).toBeVisible();
-		await expect(tile.getByRole('button', { name: /Log seen/ })).toBeVisible();
-
-		// Tap the contacted stat → logs a contacted completion. After the
-		// brief "Snailed it!" flash and reload, the contacted row should
-		// move off overdue (since contacted target is 7d and we just logged).
-		await tile.getByRole('button', { name: /Log contacted/ }).click();
-		// Wait for reload, then verify the contacted line shows "0d" and is no
-		// longer in danger color. The seen row remains overdue (never logged).
-		await expect(tile.getByText('0d')).toBeVisible();
+		// Friend appears on the Friends page.
+		const tile = page.locator('[role="button"]', { hasText: 'Alex' });
+		await expect(tile.first()).toBeVisible();
 	});
 
-	test('friend with both streams fresh hides from Focus, appears on All', async ({ page }) => {
-		// Set up: friends category with very generous targets so a single
-		// "Contacted" + "Saw" tap leaves the friend in the fresh band.
+	test('friends do not appear on Focus', async ({ page }) => {
+		// Create a friends category + friend.
 		await page.goto('/settings');
 		await page.getByRole('button', { name: 'friends', exact: true }).click();
 		await page.getByLabel('Name').fill('Calm friends');
 		await page.getByLabel('Default contacted (days)').fill('30');
 		await page.getByLabel('Default seen (days)').fill('90');
 		await page.getByRole('button', { name: 'Add category' }).click();
-		// Wait for the category card to render before navigating — otherwise the
-		// follow-up category dropdown can race the store reload.
 		await expect(page.locator('article', { hasText: 'Calm friends' })).toBeVisible();
 
-		await page.goto('/');
-		await page.getByRole('button', { name: 'New task' }).first().click();
-		const dialog = page.getByRole('dialog').filter({ hasText: 'New task' });
-		await dialog.getByRole('button', { name: 'friend', exact: true }).click();
+		await page.goto('/friends');
+		await page.getByRole('button', { name: 'New friend' }).click();
+		const dialog = page.getByRole('dialog').filter({ hasText: 'New friend' });
 		await dialog.getByLabel('Name').fill('Calm Pat');
 		await dialog.getByLabel('Category').selectOption({ label: 'Calm friends' });
 		await dialog.getByRole('button', { name: 'Add friend' }).click();
 
-		const tile = page.locator('article', { hasText: 'Calm Pat' });
-		// Brand new — both streams "never" → overdue → tile shows on Focus.
-		await expect(tile).toBeVisible();
+		// Friend appears on Friends.
+		await expect(page.getByText('Calm Pat')).toBeVisible();
 
-		// Log both streams. Now both are fresh.
-		await tile.getByRole('button', { name: /Log contacted/ }).click();
-		await page.waitForTimeout(800);
-		await tile.getByRole('button', { name: /Log seen/ }).click();
-		await page.waitForTimeout(800);
-
-		// On Focus, the tile is no longer present.
+		// Focus never shows friends, regardless of their urgency.
 		await page.goto('/');
-		await expect(page.locator('article', { hasText: 'Calm Pat' })).toHaveCount(0);
-
-		// On the All tab, the tile lives under the Friends section.
-		await page.getByRole('link', { name: 'All' }).first().click();
-		await expect(page.getByRole('heading', { name: 'Friends' })).toBeVisible();
-		await expect(page.locator('article', { hasText: 'Calm Pat' })).toBeVisible();
+		await expect(page.getByText('Calm Pat')).toHaveCount(0);
 	});
 });

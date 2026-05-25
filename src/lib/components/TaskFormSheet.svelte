@@ -1,12 +1,16 @@
 <script lang="ts">
 	import TaskForm from './TaskForm.svelte';
+	import type { TaskKind } from '$lib/types';
 
 	interface Props {
 		open: boolean;
+		initialKind?: TaskKind;
 	}
 
-	let { open = $bindable() }: Props = $props();
+	let { open = $bindable(), initialKind = 'todo' }: Props = $props();
 	let dialogEl: HTMLDialogElement;
+
+	const heading = $derived(initialKind === 'friend' ? 'New friend' : 'New task');
 
 	$effect(() => {
 		if (!dialogEl) return;
@@ -26,7 +30,7 @@
 >
 	<div class="task-sheet-body flex flex-col gap-3 p-5">
 		<div class="flex items-center justify-between">
-			<h2 class="text-base font-medium">New task</h2>
+			<h2 class="text-base font-medium">{heading}</h2>
 			<button
 				type="button"
 				onclick={close}
@@ -46,7 +50,9 @@
 				</svg>
 			</button>
 		</div>
-		<TaskForm onCreated={close} />
+		{#if open}
+			<TaskForm onCreated={close} {initialKind} />
+		{/if}
 	</div>
 </dialog>
 

@@ -11,11 +11,15 @@
 
 	interface Props {
 		onCreated?: () => void;
+		initialKind?: TaskKind;
 	}
 
-	let { onCreated }: Props = $props();
+	let { onCreated, initialKind = 'todo' }: Props = $props();
 
-	let kind: TaskKind = $state('todo');
+	// Seed once on mount; subsequent prop changes are intentionally ignored so
+	// the user's in-progress kind choice survives parent re-renders.
+	// svelte-ignore state_referenced_locally
+	let kind: TaskKind = $state(initialKind);
 	let title: string = $state('');
 	let notes: string = $state('');
 	let categoryId: string | undefined = $state(undefined);

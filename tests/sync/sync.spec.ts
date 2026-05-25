@@ -110,7 +110,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 
 	test('creating a task locally pushes to Supabase', async ({ page }) => {
 		if (!config) return;
-		await page.goto('/all');
+		await page.goto('/tasks');
 
 		await addTodo(page, 'Pushed from client');
 
@@ -133,7 +133,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 		const pageB = await ctxB.newPage();
 		instrument(pageA, 'A');
 		instrument(pageB, 'B');
-		await pageA.goto('/all');
+		await pageA.goto('/tasks');
 		await pageB.goto('/');
 
 		await expectSyncedOrDiagnose(pageA);
@@ -151,7 +151,7 @@ test.describe('Sync', { tag: '@sync' }, () => {
 
 	test('sign-out clears local data', async ({ page }) => {
 		if (!config) return;
-		await page.goto('/all');
+		await page.goto('/tasks');
 		await addTodo(page, 'Will be cleared');
 		await expect(page.locator('article', { hasText: 'Will be cleared' })).toBeVisible();
 

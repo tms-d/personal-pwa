@@ -21,11 +21,17 @@
 	let { children } = $props();
 	let signOutOpen = $state(false);
 	let taskSheetOpen = $state(false);
+	let taskSheetKind = $state<'todo' | 'friend'>('todo');
 	let accountOpenDesktop = $state(false);
 	let accountOpenMobile = $state(false);
 	let signingIn = $state(false);
 	let bugReportOpen = $state(false);
 	let bugScreenshot = $state<Blob | null>(null);
+
+	function openTaskSheet(kind: 'todo' | 'friend') {
+		taskSheetKind = kind;
+		taskSheetOpen = true;
+	}
 
 	async function openBugReport(close: () => void) {
 		close();
@@ -103,8 +109,10 @@
 
 	const tabs = [
 		{ href: '/', label: 'Focus' },
-		{ href: '/all', label: 'All' }
-	];
+		{ href: '/friends', label: 'Friends' },
+		{ href: '/kids', label: 'Kids' },
+		{ href: '/tasks', label: 'Tasks' }
+	] as const;
 
 	function isActive(href: string): boolean {
 		if (href === '/') return page.url.pathname === '/';
@@ -114,11 +122,18 @@
 	const pageTitle = $derived.by(() => {
 		const path = page.url.pathname;
 		if (path === '/') return 'Focus';
-		if (path.startsWith('/all')) return 'All';
+		if (path.startsWith('/friends')) return 'Friends';
+		if (path.startsWith('/kids')) return 'Kids';
+		if (path.startsWith('/tasks')) return 'Tasks';
 		if (path.startsWith('/history')) return 'History';
 		if (path.startsWith('/settings')) return 'Settings';
 		return 'Focus';
 	});
+
+	const onFriendsPage = $derived(page.url.pathname.startsWith('/friends'));
+
+	const leftTabs = $derived([tabs[0], tabs[1]] as const);
+	const rightTabs = $derived([tabs[2], tabs[3]] as const);
 
 	function closeAccountDesktop() {
 		accountOpenDesktop = false;
@@ -167,6 +182,35 @@
 		>
 			<circle cx="12" cy="12" r="9" />
 			<circle cx="12" cy="12" r="3.25" fill="currentColor" stroke="none" />
+		</svg>
+	{:else if href === '/friends'}
+		<svg
+			class={cls}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="1.75"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+			<circle cx="9" cy="7" r="4" />
+			<path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+			<path d="M16 3.13a4 4 0 0 1 0 7.75" />
+		</svg>
+	{:else if href === '/kids'}
+		<svg
+			class={cls}
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="1.75"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			aria-hidden="true"
+		>
+			<path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />
 		</svg>
 	{:else}
 		<svg
@@ -383,7 +427,7 @@
 
 	<button
 		type="button"
-		onclick={() => (taskSheetOpen = true)}
+		onclick={() => openTaskSheet('todo')}
 		class="bg-accent text-on-accent hover:bg-accent-hover shadow-paper mb-4 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors"
 	>
 		{@render plusIcon('h-4 w-4')}
@@ -455,16 +499,29 @@
 				{pageTitle}
 			</h1>
 
-			{#if authState.configured && !authState.loading}
-				<button
-					type="button"
-					onclick={() => (accountOpenMobile = true)}
-					aria-label="Account"
-					class="bg-sunken text-ink-tertiary hover:text-ink flex h-9 w-9 items-center justify-center rounded-full transition-colors md:hidden"
-				>
-					{@render personIcon('h-[18px] w-[18px]')}
-				</button>
-			{/if}
+			<div class="flex items-center gap-2">
+				{#if onFriendsPage}
+					<button
+						type="button"
+						onclick={() => openTaskSheet('friend')}
+						aria-label="New friend"
+						class="bg-accent text-on-accent hover:bg-accent-hover shadow-paper flex h-9 w-9 items-center justify-center rounded-full transition-colors"
+					>
+						{@render plusIcon('h-4 w-4')}
+					</button>
+				{/if}
+
+				{#if authState.configured && !authState.loading}
+					<button
+						type="button"
+						onclick={() => (accountOpenMobile = true)}
+						aria-label="Account"
+						class="bg-sunken text-ink-tertiary hover:text-ink flex h-9 w-9 items-center justify-center rounded-full transition-colors md:hidden"
+					>
+						{@render personIcon('h-[18px] w-[18px]')}
+					</button>
+				{/if}
+			</div>
 		</header>
 
 		<main
@@ -475,28 +532,31 @@
 	</div>
 </div>
 
-<!-- Mobile bottom bar: Focus | + | All -->
+<!-- Mobile bottom bar: Focus | Friends | + | Kids | Tasks -->
 <nav
 	class="border-border-subtle bg-elevated/95 fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-md md:hidden"
 	style="padding-bottom: env(safe-area-inset-bottom);"
 	aria-label="Primary"
 >
-	<div class="grid grid-cols-3 items-stretch">
-		<a
-			href="/"
-			class="flex flex-col items-center gap-1 py-2.5 transition-colors"
-			class:text-accent={isActive('/')}
-			class:text-ink-tertiary={!isActive('/')}
-			aria-current={isActive('/') ? 'page' : undefined}
-		>
-			{@render navIcon('/', 'h-[22px] w-[22px]')}
-			<span class="text-[11px] font-medium">Focus</span>
-		</a>
+	<div class="grid grid-cols-5 items-stretch">
+		{#each leftTabs as tab (tab.href)}
+			{@const active = isActive(tab.href)}
+			<a
+				href={tab.href}
+				class="flex flex-col items-center gap-1 py-2.5 transition-colors"
+				class:text-accent={active}
+				class:text-ink-tertiary={!active}
+				aria-current={active ? 'page' : undefined}
+			>
+				{@render navIcon(tab.href, 'h-[22px] w-[22px]')}
+				<span class="text-[11px] font-medium">{tab.label}</span>
+			</a>
+		{/each}
 
 		<div class="flex items-center justify-center py-1.5">
 			<button
 				type="button"
-				onclick={() => (taskSheetOpen = true)}
+				onclick={() => openTaskSheet('todo')}
 				aria-label="New task"
 				class="bg-accent text-on-accent hover:bg-accent-hover shadow-paper flex h-12 w-12 items-center justify-center rounded-full transition-colors"
 			>
@@ -504,16 +564,19 @@
 			</button>
 		</div>
 
-		<a
-			href="/all"
-			class="flex flex-col items-center gap-1 py-2.5 transition-colors"
-			class:text-accent={isActive('/all')}
-			class:text-ink-tertiary={!isActive('/all')}
-			aria-current={isActive('/all') ? 'page' : undefined}
-		>
-			{@render navIcon('/all', 'h-[22px] w-[22px]')}
-			<span class="text-[11px] font-medium">All</span>
-		</a>
+		{#each rightTabs as tab (tab.href)}
+			{@const active = isActive(tab.href)}
+			<a
+				href={tab.href}
+				class="flex flex-col items-center gap-1 py-2.5 transition-colors"
+				class:text-accent={active}
+				class:text-ink-tertiary={!active}
+				aria-current={active ? 'page' : undefined}
+			>
+				{@render navIcon(tab.href, 'h-[22px] w-[22px]')}
+				<span class="text-[11px] font-medium">{tab.label}</span>
+			</a>
+		{/each}
 	</div>
 </nav>
 
@@ -563,7 +626,7 @@
 	</div>
 {/if}
 
-<TaskFormSheet bind:open={taskSheetOpen} />
+<TaskFormSheet bind:open={taskSheetOpen} initialKind={taskSheetKind} />
 <SignOutDialog bind:open={signOutOpen} />
 <BugReportDialog
 	bind:open={bugReportOpen}

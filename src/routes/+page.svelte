@@ -1,6 +1,5 @@
 <script lang="ts">
 	import TaskCard from '$lib/components/TaskCard.svelte';
-	import FriendTile from '$lib/components/FriendTile.svelte';
 	import { Card } from '$lib/ui';
 	import { taskStore, categoryStore } from '$lib/store.svelte';
 	import { computeStatus } from '$lib/tasks';
@@ -8,12 +7,14 @@
 
 	const urgencyOrder = { overdue: 0, due: 1, soon: 2, fresh: 3 } as const;
 
-	// Friends and cadence tasks only surface on Focus when they're past the
-	// "soon" threshold (last ~30% of their target). Calm ones live on All.
+	// Focus is task-only. Friends have their own tab — see issue #41.
+	// Cadence tasks still surface here when they're past the "soon"
+	// threshold (last ~30% of their target). Calm ones live on Tasks.
 	function shouldShowOnFocus(t: TaskWithLast): boolean {
+		if (t.kind === 'friend') return false;
 		const s = computeStatus(t);
 		if (!s.visible) return false;
-		if (t.kind === 'friend' || t.kind === 'cadence') return s.urgency !== 'fresh';
+		if (t.kind === 'cadence') return s.urgency !== 'fresh';
 		return true;
 	}
 
@@ -40,6 +41,7 @@
 		}
 		const result: Group[] = [];
 		for (const cat of categoryStore.items) {
+			if (cat.kind === 'friends') continue;
 			const tasks = byCategory.get(cat.id);
 			if (tasks && tasks.length > 0) result.push({ category: cat, tasks });
 		}
@@ -50,14 +52,9 @@
 		return result;
 	});
 
-	const hasAnyCategories = $derived(categoryStore.items.length > 0);
-
-	function partitionByKind(tasks: TaskWithLast[]) {
-		const friends: TaskWithLast[] = [];
-		const others: TaskWithLast[] = [];
-		for (const t of tasks) (t.kind === 'friend' ? friends : others).push(t);
-		return { friends, others };
-	}
+	const hasAnyCategories = $derived(
+		categoryStore.items.some((c) => c.kind !== 'friends')
+	);
 </script>
 
 <div class="flex flex-col gap-5">
@@ -68,29 +65,18 @@
 			<div class="flex flex-col items-center gap-1 py-6 text-center">
 				<p class="text-ink text-base font-medium">Nothing on your plate.</p>
 				<p class="text-ink-tertiary text-sm">
-					Add tasks on the All tab to see what's due.
+					Add tasks on the Tasks tab to see what's due.
 				</p>
 			</div>
 		</Card>
 	{:else if !hasAnyCategories}
-		{@const { friends, others } = partitionByKind(visible.map((v) => v.task))}
-		{#if others.length > 0}
-			<div class="flex flex-col gap-3">
-				{#each others as task (task.id)}
-					<TaskCard {task} />
-				{/each}
-			</div>
-		{/if}
-		{#if friends.length > 0}
-			<div class="grid grid-cols-2 gap-2.5">
-				{#each friends as task (task.id)}
-					<FriendTile {task} />
-				{/each}
-			</div>
-		{/if}
+		<div class="flex flex-col gap-3">
+			{#each visible as { task } (task.id)}
+				<TaskCard {task} />
+			{/each}
+		</div>
 	{:else}
 		{#each groups as group (group.category?.id ?? '__uncategorized')}
-			{@const { friends, others } = partitionByKind(group.tasks)}
 			<section class="flex flex-col gap-3">
 				<div class="flex items-center gap-2 px-1">
 					{#if group.category}
@@ -112,16 +98,9 @@
 						</h2>
 					{/if}
 				</div>
-				{#each others as task (task.id)}
+				{#each group.tasks as task (task.id)}
 					<TaskCard {task} />
 				{/each}
-				{#if friends.length > 0}
-					<div class="grid grid-cols-2 gap-2.5">
-						{#each friends as task (task.id)}
-							<FriendTile {task} />
-						{/each}
-					</div>
-				{/if}
 			</section>
 		{/each}
 	{/if}
